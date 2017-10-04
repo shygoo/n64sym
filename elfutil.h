@@ -66,13 +66,13 @@ public:
 
 	static CElfObject* Create(const char* path)
 	{
-        std::ifstream stream;
-        stream.open(path, std::ios::in | std::ios::binary);
+		std::ifstream stream;
+		stream.open(path, std::ios::in | std::ios::binary);
 
-        if(stream == NULL)
+		if((stream.rdstate() & std::ifstream::failbit) != 0)
 		{
-            return NULL;
-        }
+			return NULL;
+		}
 
 		return new CElfObject(stream, 0);
 	}
