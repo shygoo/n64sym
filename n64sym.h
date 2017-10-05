@@ -11,7 +11,7 @@ License: MIT
 
 #include <elfio/elfio.hpp>
 #include <stdarg.h>
-#include <windows.h>
+#include <dirent.h>
 
 #include "arutil.h"
 #include "elfutil.h"
@@ -319,67 +319,69 @@ public:
 		_this->ProcessElf(stream, stream.tellg(), blockInfo->sz_identifier);
 	}
 
+	// returns true if 'str' endis with 'suffix'
+	static bool EndsWith(const char *str, const char *suffix)
+	{
+		if (!str || !suffix)
+		{
+			return false;
+		}
+		size_t len_str = strlen(str);
+		size_t len_suffix = strlen(suffix);
+		if (len_suffix > len_str)
+		{
+			return false;
+		}
+		return (0 == strncmp(str + len_str - len_suffix, suffix, len_suffix));
+	}
+
+
 	void ScanRecursive(const char* path)
 	{
-		WIN32_FIND_DATA findData;
-		HANDLE hFindFile;
+		DIR *dir;
+		struct dirent *entry;
 
-		DWORD attributes = GetFileAttributes(path);
-		
-		if(attributes == INVALID_FILE_ATTRIBUTES)
+		dir = opendir(path);
+
+		if (!dir) return;
+
+		while ((entry = readdir(dir)) != NULL)
 		{
-			return;
-		}
-	
-		if(attributes & FILE_ATTRIBUTE_DIRECTORY)
-		{
-			char cFindPath[MAX_PATH];
-			sprintf(cFindPath, "%s/*.*", path);
-
-			hFindFile = FindFirstFile(cFindPath, &findData);
-
-			if(hFindFile == INVALID_HANDLE_VALUE)
-			{
-				return;
-			}
-
-			bool bFoundFile = true;
-
-			while(bFoundFile)
-			{
-				if(findData.cFileName[0] == '.')
+			char next_path[PATH_MAX];
+			if (!entry->d_name) continue;
+			snprintf(next_path, sizeof(next_path), "%s/%s", path, entry->d_name);
+			switch (entry->d_type) {
+				case DT_DIR:
+					// skip "." dirs
+					if (entry->d_name[0] == '.')
+					{
+						continue;
+					}
+					// scan subdirectory
+					ScanRecursive(next_path);
+					break;
+				case DT_REG:
 				{
-					bFoundFile = FindNextFile(hFindFile, &findData);
-					continue;
+					Log("%s\n", next_path);
+					int pathLen = strlen(entry->d_name);
+					if (pathLen >= 3) {
+						if (EndsWith(entry->d_name, ".a"))
+						{
+							ar_process_blocks(next_path, CbProcessElf, this);
+						}
+						else if (EndsWith(entry->d_name, ".o"))
+						{
+							ProcessElf(next_path);
+						}
+					}
+					break;
 				}
-
-				char cFullPath[MAX_PATH];
-				sprintf(cFullPath, "%s/%s", path, findData.cFileName);
-
-				ScanRecursive(cFullPath);
-				bFoundFile = FindNextFile(hFindFile, &findData);
+				default:
+					break;
 			}
-			return;
 		}
-		
-		Log("%s\n", path);
-		
-		int pathLen = strlen(path);
+		closedir(dir);
 
-		if(pathLen < 3)
-		{
-			return;
-		}
-
-		if(strcmp(&path[pathLen - 2], ".a") == 0)
-		{
-			ar_process_blocks(path, CbProcessElf, this);
-		}
-
-		if(strcmp(&path[pathLen - 2], ".o") == 0)
-		{
-			ProcessElf(path);
-		}
 	}
 
 	bool Run()
