@@ -201,7 +201,7 @@ public:
 			ELF_SYMBOL symbol;
 			elf->GetSymbol(i, symbol);
 
-			if(symbol.size > 0 && symbol.bind == 1)
+			if(symbol.size > 0 && symbol.bind == 1 && symbol.type != 0)
 			{
 				SEARCH_RESULT result;
 				result.file_address = 0;
