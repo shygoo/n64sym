@@ -335,16 +335,59 @@ public:
 		return (0 == strncmp(str + len_str - len_suffix, suffix, len_suffix));
 	}
 
+	static bool PathIsStaticLibrary(const char *path)
+	{
+		if (strlen(path) < 3)
+		{
+			return false;
+		}
+		return EndsWith(path, ".a") || EndsWith(path, ".A");
+	}
+
+	static bool PathIsObjectFile(const char *path)
+	{
+		if (strlen(path) < 3)
+		{
+			return false;
+		}
+		return EndsWith(path, ".o") || EndsWith(path, ".O");
+	}
+
+	static bool IsFileWithSymbols(const char *path)
+	{
+		return PathIsStaticLibrary(path) || PathIsObjectFile(path);
+	}
+
+	void ProcessFile(const char* filePath)
+	{
+		Log("%s\n", filePath);
+		if (PathIsStaticLibrary(filePath))
+		{
+			ar_process_blocks(filePath, CbProcessElf, this);
+		}
+		else if (PathIsObjectFile(filePath))
+		{
+			ProcessElf(filePath);
+		}
+	}
 
 	void ScanRecursive(const char* path)
 	{
+		if (IsFileWithSymbols(path))
+		{
+			ProcessFile(path);
+			return;
+		}
+
 		DIR *dir;
-		struct dirent *entry;
-
 		dir = opendir(path);
+		if (dir == NULL)
+		{
+			printf("%s is neither a directory or file with symbols.\n", path);
+			return;
+		}
 
-		if (!dir) return;
-
+		struct dirent *entry;
 		while ((entry = readdir(dir)) != NULL)
 		{
 			char next_path[PATH_MAX];
@@ -362,17 +405,9 @@ public:
 					break;
 				case DT_REG:
 				{
-					Log("%s\n", next_path);
-					int pathLen = strlen(entry->d_name);
-					if (pathLen >= 3) {
-						if (EndsWith(entry->d_name, ".a"))
-						{
-							ar_process_blocks(next_path, CbProcessElf, this);
-						}
-						else if (EndsWith(entry->d_name, ".o"))
-						{
-							ProcessElf(next_path);
-						}
+					if (IsFileWithSymbols(next_path))
+					{
+						ProcessFile(next_path);
 					}
 					break;
 				}
