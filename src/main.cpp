@@ -90,24 +90,17 @@ int main(int argc, const char* argv[])
 		case 'v':
 			n64sym->SetVerbose(true);
 			break;
-		//case 'r':
-		//	n64sym_set_rom_mode(n64sym, true);
-		//	break;
 		default:
 			printf("Error: Invalid switch '%s'\n", argv[argi]);
 			goto exit_cleanup;
 		}
 	}
-	
+
 	n64sym->Run();
 	n64sym->SortResults();
 	n64sym->DumpResults();
-	//n64sym_run(n64sym);
-	//n64sym_sort_results(n64sym);
-	//n64sym_dump_results(n64sym);
 	
   exit_cleanup:
-	//n64sym_destroy(n64sym);
 	delete n64sym;
 	return 0;
 }

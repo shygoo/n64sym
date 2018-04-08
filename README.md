@@ -14,6 +14,3 @@ Eg:
 ```
 n64sym paper_mario.bin -l libs/libgultra_rom.a
 ```
-
-
-This project uses [elfio](https://github.com/serge1/ELFIO).
