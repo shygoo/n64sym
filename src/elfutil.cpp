@@ -162,6 +162,11 @@ const char* CElfSymbol::Name(CElfContext* elf)
     return (const char*)str_sec->Data(elf) + NameOffset();
 }
 
+CElfSection* CElfSymbol::Section(CElfContext* elf)
+{
+    return elf->Section(SectionIndex());
+}
+
 //////////////
 
 CElfSymbol* CElfRelocation::Symbol(CElfContext* elf)

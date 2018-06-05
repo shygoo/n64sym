@@ -191,6 +191,7 @@ public:
     uint8_t Type(){ return (uint8_t)(Info() & 0x0F); }
     uint8_t Binding(){ return (uint8_t)(Info() >> 4); }
     const char* Name(CElfContext* elf);
+    CElfSection* Section(CElfContext* elf);
 };
 
 class CElfRelocation

@@ -13,6 +13,14 @@ OFILES=$(patsubst $(SDIR)/%.cpp,$(ODIR)/%.o,$(SFILES))
 
 TARGET=$(BDIR)/n64sym
 
+.PHONY: all n64sym elf2pj64 elftest clean
+
+all: n64sym elf2pj64 elftest
+
+##############
+
+n64sym: $(TARGET)
+
 $(TARGET): $(OFILES) | $(BDIR)
 	$(LD) $(LDFLAGS) $(OFILES) -o $(TARGET)
 
@@ -25,9 +33,29 @@ $(ODIR):
 $(BDIR):
 	mkdir $(BDIR)
 
+##############
+
+elf2pj64: $(BDIR)/elf2pj64
+
+$(ODIR)/elf2pj64.o: $(SDIR)/elf2pj64/elf2pj64.cpp | $(ODIR)
+	$(CC) $(CFLAGS) -c $(SDIR)/elf2pj64/elf2pj64.cpp -o $(ODIR)/elf2pj64.o
+
+$(BDIR)/elf2pj64: $(ODIR)/elf2pj64.o $(ODIR)/elfutil.o | $(BDIR)
+	$(LD) $(LDFLAGS) $(ODIR)/elfutil.o $(ODIR)/elf2pj64.o -o $(BDIR)/elf2pj64
+
+##############
+
+elftest: $(BDIR)/elftest
+
+$(ODIR)/elftest.o: $(SDIR)/elftest/elftest.cpp | $(ODIR)
+	$(CC) $(CFLAGS) -c $(SDIR)/elftest/elftest.cpp -o $(ODIR)/elftest.o
+
+$(BDIR)/elftest: $(ODIR)/elftest.o $(ODIR)/elfutil.o $(ODIR)/arutil.o | $(BDIR)
+	$(LD) $(LDFLAGS) $(ODIR)/elfutil.o $(ODIR)/arutil.o $(ODIR)/elftest.o -o $(BDIR)/elftest
+
+##############
+
 clean:
 	rm -f n64sym
 	rm -rf $(ODIR)
 	rm -rf $(BDIR)
-
-.PHONY: n64sym clean

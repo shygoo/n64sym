@@ -1,5 +1,5 @@
-#include "elfutil.h"
-#include "arutil.h"
+#include "../elfutil.h"
+#include "../arutil.h"
 
 #include <string.h>
 #include <windows.h>
