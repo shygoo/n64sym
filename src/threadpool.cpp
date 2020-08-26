@@ -1,3 +1,11 @@
+/*
+
+    thread management for n64sym
+    shygoo 2017
+    License: MIT
+    
+*/
+
 #include "threadpool.h"
 
 #include <pthread.h>
@@ -27,13 +35,13 @@ CThreadPool::~CThreadPool()
 
 int CThreadPool::GetNumCPUCores()
 {
-	#ifdef _WIN32
-	SYSTEM_INFO info;
-	GetSystemInfo(&info);
-	return (int)info.dwNumberOfProcessors;
-	#else
-	return sysconf(_SC_NPROCESSORS_ONLN);
-	#endif
+    #ifdef _WIN32
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    return (int)info.dwNumberOfProcessors;
+    #else
+    return sysconf(_SC_NPROCESSORS_ONLN);
+    #endif
 }
 
 void* CThreadPool::RoutineProc(void* _worker)

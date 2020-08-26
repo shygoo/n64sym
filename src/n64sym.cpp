@@ -1,217 +1,460 @@
+/*
+
+    n64sym
+    Symbol identification tool for N64 games
+    shygoo 2017, 2020
+    License: MIT
+
+*/
+
+#include <fstream>
+#include <set>
+
+#include <miniz/miniz.h>
+#include <miniz/miniz.c>
+
 #include "n64sym.h"
+#include "builtin_signatures.h"
+#include "signaturefile.h"
+#include "pathutil.h"
 
-CN64Sym* CN64Sym::Create(const char* binPath)
+CN64Sym::CN64Sym() :
+    m_Binary(NULL),
+    m_BinarySize(0),
+    m_bVerbose(false),
+    m_bUseBuiltinSignatures(false),
+    m_HeaderSize(0x80000000),
+    m_bThoroughScan(false)
 {
-	FILE* pfile = fopen(binPath, "rb");
+    char *builtinSigFileContents = new char[gBuiltinSignatureFile.uncSize];
 
-	if(pfile == NULL)
-	{
-		return NULL;
-	}
+    uLong uncSize = gBuiltinSignatureFile.uncSize;
+    uncompress((uint8_t *)builtinSigFileContents, &uncSize,
+        gBuiltinSignatureFile.data, gBuiltinSignatureFile.cmpSize);
 
-	return new CN64Sym(pfile);
-}
+    m_BuiltinSigs.LoadFromMemory(builtinSigFileContents);
 
-CN64Sym::CN64Sym(FILE* pfile) :
-	m_Data(NULL),
-	m_DataSize(0),
-	m_Results(NULL),
-	m_LibPaths(NULL),
-	m_bVerbose(false)
-{
-	fseek(pfile, 0, SEEK_END);
-	
-	m_DataSize = ftell(pfile);
-	m_Data = (uint8_t*) malloc(m_DataSize);
-
-	rewind(pfile);
-	fread(m_Data, 1, m_DataSize, pfile);
-	
-	m_Results = new search_results_t;
-	m_LibPaths = new str_vector_t;
+    delete[] builtinSigFileContents;
 }
 
 CN64Sym::~CN64Sym()
 {
-	m_Results->clear();
-	delete m_Results;
-
-	m_LibPaths->clear();
-	delete m_LibPaths;
-
-	free(m_Data);
+    if(m_Binary != NULL)
+    {
+        delete[] m_Binary;
+    }
 }
 
-void CN64Sym::Log(const char* format, ...)
+bool CN64Sym::LoadBinary(const char *binPath)
 {
-	if(!m_bVerbose	)
-	{
-		return;
-	}
+    if(m_Binary != NULL)
+    {
+        delete[] m_Binary;
+        m_BinarySize = 0;
+    }
 
-	va_list args;
-	va_start(args, format);
-	vprintf(format, args);
-	va_end(args);
+    std::ifstream file;
+    file.open(binPath, std::ifstream::binary);
+
+    if(!file.is_open())
+    {
+        return false;
+    }
+
+    file.seekg(0, file.end);
+    m_BinarySize = file.tellg();
+
+    file.seekg(0, file.beg);
+    m_Binary = new uint8_t[m_BinarySize];
+    file.read((char *)m_Binary, m_BinarySize);
+
+    if(PathIsN64Rom(binPath))
+    {
+        if(m_BinarySize < 0x101000)
+        {
+            delete[] m_Binary;
+            m_BinarySize = 0;
+            return false;
+        }
+
+        uint32_t endianCheck = bswap32(*(uint32_t *)&m_Binary[0x00]);
+
+        switch(endianCheck)
+        {
+        case 0x80371240:
+            break;
+        case 0x40123780:
+            for(size_t i = 0; i < m_BinarySize; i += sizeof(uint32_t))
+            {
+                *(uint32_t *)&m_Binary[i] = bswap32(*(uint32_t *)&m_Binary[i]);
+            }
+            break;
+        case 0x37804012:
+            for(size_t i = 0; i < m_BinarySize; i += sizeof(uint16_t))
+            {
+                *(uint16_t *)&m_Binary[i] = bswap16(*(uint16_t *)&m_Binary[i]);
+            }
+            break;
+        }
+
+        uint32_t entryPoint = bswap32(*(uint32_t *)&m_Binary[0x08]);
+        m_HeaderSize = entryPoint - 0x1000;
+    }
+
+    return true;
 }
 
 void CN64Sym::AddLibPath(const char* libPath)
 {
-	m_LibPaths->push_back(libPath);
-}
-
-bool CN64Sym::AddResult(search_result_t result)
-{
-	// have link address from jump target
-	if(result.address != 0)
-	{
-		for(int i = 0; i < m_Results->size(); i++)
-		{
-			search_result_t test_result = m_Results->at(i);
-			if(test_result.address == result.address)
-			{
-				return false; // already have
-			}
-		}
-		m_Results->push_back(result);
-		//Log("    %08X %s\n", result.address, result.name);
-		return true;
-	}
-	m_Results->push_back(result);
-}
-
-bool CN64Sym::ResultCmp(search_result_t a, search_result_t b)
-{
-	return (a.address < b.address);
-}
-
-bool CN64Sym::ResultCmp2(search_result_t a, search_result_t b)
-{
-	return (a.address < b.address);
-}
-
-void CN64Sym::SortResults()
-{
-	std::sort(m_Results->begin(), m_Results->end(), ResultCmp);
-}
-
-void CN64Sym::DumpResults()
-{
-	for(int i = 0; i < m_Results->size(); i++)
-	{
-		search_result_t result = m_Results->at(i);
-		printf("%08X,code,%s\n", result.address, result.name);
-	}
+    m_LibPaths.push_back(libPath);
 }
 
 void CN64Sym::SetVerbose(bool bVerbose)
 {
-	m_bVerbose = bVerbose;
+    m_bVerbose = bVerbose;
 }
 
-size_t CN64Sym::DataSize()
+void CN64Sym::UseBuiltinSignatures(bool bUseBuiltinSignatures)
 {
-	return m_DataSize;
+    m_bUseBuiltinSignatures = bUseBuiltinSignatures;
 }
 
-void CN64Sym::AddSymbolResults(CElfContext* elf, uint32_t baseAddress, int maxTextOffset)
+void CN64Sym::SetThoroughScan(bool bThoroughScan)
 {
-	int nSymbols = elf->NumSymbols();
-
-	for(int i = nSymbols - 1; i >= 0; i--)
-	{
-		CElfSymbol* symbol = elf->Symbol(i);
-		if(symbol->Binding() == STB_GLOBAL &&
-		   symbol->Type() != STT_NOTYPE &&
-		   symbol->SectionIndex() != SHN_UNDEF &&
-		   symbol->Size() > 0)
-		{
-			if(maxTextOffset > 0 && symbol->Value() >= maxTextOffset)
-			{
-				// exceeds maximum offset for a partial match
-				continue;
-			}
-
-			search_result_t result;
-			//result.file_address = 0;
-			result.address = 0x80000000 | (baseAddress + symbol->Value());
-			result.size = symbol->Size();
-			strcpy(result.name, symbol->Name(elf));
-
-			Log("adding %s\n", result.name);
-			AddResult(result);
-		}
-	}
+    m_bThoroughScan = bThoroughScan;
 }
 
-void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const char* altNamePrefix, int maxTextOffset)
+bool CN64Sym::Run()
 {
-	Log("Adding relocation results...\n");
+    if(m_Binary == NULL)
+    {
+        return false;
+    }
 
-	int nRelocations = elf->NumTextRelocations();
+    m_LikelyFunctionOffsets.clear();
 
-	for(int i = 0; i < nRelocations; i++)
-	{
-		CElfRelocation* relocation = elf->TextRelocation(i);
-		CElfSymbol* symbol = relocation->Symbol(elf);
-		int textOffset = relocation->Offset();
-		uint32_t opcode = bswap32(*(uint32_t*)&block[textOffset]);
-		uint8_t relType = relocation->Type();
+    for(size_t i = 0; i < m_BinarySize; i += sizeof(uint32_t))
+    {
+        uint32_t word = bswap32(*(uint32_t*)&m_Binary[i]);
 
-		Log("%s %04X\n", symbol->Name(elf), textOffset);
+        // JR RA (+ 8)
+        if(word == 0x03E00008)
+        {
+            if(*(uint32_t*)&m_Binary[i + 8] != 0x00000000)
+            {
+                m_LikelyFunctionOffsets.insert(i + 8);
+            }
+        }
 
-		if(maxTextOffset > 0 && textOffset >= maxTextOffset)
-		{
-			// exceeds maximum offset for a partial match
-			continue;
-		}
-		
-		if(relType == R_MIPS_26 && (opcode >> 26) == 0x0C)
-		{
-			uint32_t jalTarget = 0x80000000 | ((opcode & 0x3FFFFFF) * 4);
-			
-			search_result_t result;
-			result.address = jalTarget;
-			result.size = 0;
-			strncpy(result.name, symbol->Name(elf), 64);
+        // ADDIU SP, SP, -n
+        if((word & 0xFFFF0000) == 0x27BD0000 && (int16_t)(word & 0xFFFF) < 0)
+        {
+            m_LikelyFunctionOffsets.insert(i);
+        }
 
-			if(relocation->SymbolIndex() == 1)
-			{
-				// Static function, compiler tossed out the symbol
-				// Use object file name and text offset as a replacement
-				int len = sprintf(result.name, "%s_%04X", altNamePrefix, textOffset);
-				for(int i = 0; i < len; i++)
-				{
-					if(result.name[i] == '.')
-					{
-						result.name[i] = '_';
-					}
-				}
-			}
+        // todo JALs
+    }
 
-			Log("adding %s (relocation)\n", result.name);
+    TallyNumSymbolsToCheck();
 
-			AddResult(result);
-		}
-		else if(relType == R_MIPS_LO16 && i > 0)
-		{
-			CElfRelocation* prevRelocation = elf->TextRelocation(i - 1);
+    if(m_bUseBuiltinSignatures)
+    {
+        ProcessSignatureFile(m_BuiltinSigs);
+    }
 
-			if(prevRelocation->Type() == R_MIPS_HI16)
-			{
-				uint32_t upperOp = bswap32(*(uint32_t*)&block[prevRelocation->Offset()]);
-				uint32_t lowerOp = opcode;
+    for(size_t i = 0; i < m_LibPaths.size(); i++)
+    {
+        ScanRecursive(m_LibPaths.at(i));
+    }
 
-				// TODO: Implement
+    SortResults();
 
-				CElfSymbol* symbol = relocation->Symbol(elf);
-				Log("%04X%04X,data,%s\n", upperOp & 0xFFFF, lowerOp & 0xFFFF, symbol->Name(elf));
-			}
-		}
-	}
+    Log("\n");
+    return true;
 }
 
-bool CN64Sym::ElfTextDataCompare(CElfContext* elf, const char* data, int* nBytesMatched)
+void CN64Sym::DumpResults()
+{
+    for(int i = 0; i < m_Results.size(); i++)
+    {
+        search_result_t result = m_Results.at(i);
+        printf("%08X,code,%s\n", result.address, result.name);
+    }
+}
+
+void CN64Sym::ScanRecursive(const char* path)
+{
+    if (IsFileWithSymbols(path))
+    {
+        ProcessFile(path);
+        return;
+    }
+    DIR *dir;
+    dir = opendir(path);
+    if (dir == NULL)
+    {
+        printf("%s is neither a directory or file with symbols.\n", path);
+        return;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        char next_path[PATH_MAX];
+        if (!entry->d_name) continue;
+        snprintf(next_path, sizeof(next_path), "%s/%s", path, entry->d_name);
+        switch (entry->d_type) {
+            case DT_DIR:
+                // skip "." dirs
+                if (entry->d_name[0] == '.')
+                {
+                    continue;
+                }
+                // scan subdirectory
+                ScanRecursive(next_path);
+                break;
+            case DT_REG:
+            {
+                if (IsFileWithSymbols(next_path))
+                {
+                    //printf("next path %s\n", next_path);
+                    ProcessFile(next_path);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    closedir(dir);
+}
+
+void CN64Sym::ProcessFile(const char* path)
+{
+    //Log("%s\n", path);
+    if (PathIsStaticLibrary(path))
+    {
+        ProcessLibrary(path);
+    }
+    else if (PathIsObjectFile(path))
+    {
+        ProcessObject(path);
+    }
+    else if(PathIsSignatureFile(path))
+    {
+        ProcessSignatureFile(path);
+    }
+}
+
+void CN64Sym::ProcessLibrary(const char* path)
+{
+    CArReader ar;
+
+    if(!ar.Load(path))
+    {
+        return;
+    }
+
+    while(ar.SeekNextBlock())
+    {
+        // worker thread will delete objProcessingCtx after it's done
+        obj_processing_context_t* objProcessingCtx = new obj_processing_context_t;
+        objProcessingCtx->mt_this = this;
+        objProcessingCtx->libraryPath = path;
+        objProcessingCtx->blockIdentifier = ar.GetBlockIdentifier();
+        objProcessingCtx->blockData = ar.GetBlockData();
+        objProcessingCtx->blockSize = ar.GetBlockSize();
+
+        threadPool.AddWorker(ProcessObjectProc, (void*)objProcessingCtx);
+    }
+
+    threadPool.WaitForWorkers();
+}
+
+void CN64Sym::ProcessObject(const char* path)
+{
+    uint8_t* buffer;
+    size_t size;
+
+    FILE* fp = fopen(path, "rb");
+
+    if(fp == NULL)
+    {
+        return;
+    }
+
+    fseek(fp, 0, SEEK_END);
+    size = ftell(fp);
+    rewind(fp);
+
+    buffer = (uint8_t *)malloc(size);
+    fread(buffer, 1, size, fp);
+    fclose(fp);
+
+    Log("%s\n", path);
+
+    obj_processing_context_t objProcessingCtx;
+    objProcessingCtx.mt_this = NULL;
+    objProcessingCtx.libraryPath = NULL;
+    objProcessingCtx.blockIdentifier = path;
+    objProcessingCtx.blockData = buffer;
+    objProcessingCtx.blockSize = size;
+
+    ProcessObject(&objProcessingCtx);
+
+    free(buffer);
+}
+
+void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx)
+{
+    CElfContext elf;
+    elf.LoadFromMemory(objProcessingCtx->blockData, objProcessingCtx->blockSize);
+
+    CElfSection* textSec = elf.Section(".text");
+
+    if(textSec == NULL)
+    {
+        return;
+    }
+
+    const char* textBuf = textSec->Data(&elf);
+    uint32_t textSize = textSec->Size();
+
+    int endAddress = m_BinarySize - textSize;
+
+    bool bHaveFullMatch;
+    uint32_t matchedAddress;
+    int nBytesMatched;
+    int bestPartialMatchLength = 0;
+    const char* matchedBlock = NULL;
+
+    for(uint32_t blockAddress = 0; blockAddress < endAddress; blockAddress += sizeof(uint32_t))
+    {
+        const char* block = (const char*)&m_Binary[blockAddress];
+        bHaveFullMatch = TestElfObjectText(&elf, block, &nBytesMatched);
+
+        if(bHaveFullMatch)
+        {
+            matchedBlock = block;
+            matchedAddress = blockAddress;
+            break;
+        }
+        else if(nBytesMatched > bestPartialMatchLength)
+        {
+            matchedBlock = block;
+            matchedAddress = blockAddress;
+            bestPartialMatchLength = nBytesMatched;
+        }
+    }
+
+    threadPool.LockDefaultMutex();
+
+    Log("%s:%s\n", objProcessingCtx->libraryPath, objProcessingCtx->blockIdentifier);
+
+    if(bHaveFullMatch)
+    {
+        //printf("fullmatch %s\n", objProcessingCtx->blockIdentifier);
+        Log("complete match\n");
+        AddSymbolResults(&elf, matchedAddress);
+        AddRelocationResults(&elf, matchedBlock, "__"); // fix me altNamePrefix
+    }
+    else if(bestPartialMatchLength >= 32)
+    {
+        Log("partial match (0x%02X bytes)\n", bestPartialMatchLength);
+        AddSymbolResults(&elf, matchedAddress, bestPartialMatchLength);
+        AddRelocationResults(&elf, matchedBlock, "__", bestPartialMatchLength); // fix me altNamePrefix
+    }
+    else
+    {
+        threadPool.UnlockDefaultMutex();
+        return;
+    }
+
+    for(size_t i = 0; i < textSize; i += 4)
+    {
+        uint32_t buffOp = bswap32(*(uint32_t*)&matchedBlock[i]);
+        uint32_t textOp = bswap32(*(uint32_t*)&textBuf[i]);
+
+        CElfRelocation* relocation = NULL;
+        CElfSymbol* symbol = NULL;
+        bool bHaveRel = false;
+
+        for(int j = 0; j < elf.NumTextRelocations(); j++)
+        {
+            relocation = elf.TextRelocation(j);
+            if(relocation->Offset() == i)
+            {
+                Log("have reloc\n");
+                symbol = relocation->Symbol(&elf);
+                bHaveRel = true;
+            }
+        }
+
+        Log("%08X/%04X: %08X %08X", m_HeaderSize + (matchedAddress + i), i, buffOp, textOp);
+        textOp == buffOp ? Log("\n") : Log(" * %s\n", bHaveRel ? symbol->Name(&elf) : "");
+    }
+
+    Log("\n");
+    threadPool.UnlockDefaultMutex();
+}
+
+void* CN64Sym::ProcessObjectProc(void* _objProcessingCtx)
+{
+    obj_processing_context_t* objProcessingCtx = (obj_processing_context_t*)_objProcessingCtx;
+    CN64Sym* _this = objProcessingCtx->mt_this;
+
+    _this->ProcessObject(objProcessingCtx);
+
+    delete objProcessingCtx;
+}
+
+void CN64Sym::ProcessSignatureFile(const char* path)
+{
+    CSignatureFile sigFile;
+
+    if(sigFile.Load(path))
+    {
+        ProcessSignatureFile(sigFile);
+    }
+}
+
+void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile)
+{
+    size_t numSymbols = sigFile.GetNumSymbols();
+
+    for(size_t nSymbol = 0; nSymbol < numSymbols; nSymbol++)
+    {
+        uint32_t symbolSize = sigFile.GetSymbolSize(nSymbol);
+        uint32_t endOffset = m_BinarySize - symbolSize;
+        char symbolName[128];
+        sigFile.GetSymbolName(nSymbol, symbolName, sizeof(symbolName));
+
+        int progressLineLength = printf("(%d/%d) %s", nSymbol, numSymbols, symbolName);
+
+        for(auto offset : m_LikelyFunctionOffsets)
+        {
+            if(TestSignatureSymbol(sigFile, nSymbol, offset))
+            {
+                goto next_symbol;
+            }
+        }
+
+        if(m_bThoroughScan)
+        {
+            for(uint32_t offset = 0; offset < endOffset; offset += 4)
+            {
+                if(TestSignatureSymbol(sigFile, nSymbol, offset))
+                {
+                    goto next_symbol;
+                }
+            }
+        }
+
+        next_symbol:
+        ClearLine(progressLineLength);
+    }
+}
+
+bool CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesMatched)
 {
     CElfSection *text_sec, *rel_text_sec;
     CElfRelocation* text_relocations;
@@ -223,7 +466,7 @@ bool CN64Sym::ElfTextDataCompare(CElfContext* elf, const char* data, int* nBytes
 
     if(text_sec == NULL)
     {
-		*nBytesMatched = 0;
+        *nBytesMatched = 0;
         return false;
     }
 
@@ -234,14 +477,14 @@ bool CN64Sym::ElfTextDataCompare(CElfContext* elf, const char* data, int* nBytes
     if(num_text_relocations == 0)
     {
         // no relocations, do plain binary comparison
-		if(memcmp(text_sec_data, data, text_sec_size) == 0)
-		{
-			*nBytesMatched = text_sec_size;
-			return true;
-		}
+        if(memcmp(text_sec_data, data, text_sec_size) == 0)
+        {
+            *nBytesMatched = text_sec_size;
+            return true;
+        }
         
-		*nBytesMatched = 0;
-		return false;
+        *nBytesMatched = 0;
+        return false;
     }
 
     rel_text_sec = elf->Section(".rel.text");
@@ -249,320 +492,335 @@ bool CN64Sym::ElfTextDataCompare(CElfContext* elf, const char* data, int* nBytes
 
     int cur_reltab_index = 0;
     uint32_t cur_relocation_offset = 0;
-	
+    
     for(int i = 0; i < text_sec_size; i += sizeof(uint32_t))
     {
-		//bool have_relocation = false;
-		// see if this opcode has a relocation
+        //bool have_relocation = false;
+        // see if this opcode has a relocation
 
-		CElfRelocation* curRelocation = &text_relocations[cur_reltab_index];
+        CElfRelocation* curRelocation = &text_relocations[cur_reltab_index];
 
-		if(cur_reltab_index < num_text_relocations && i == curRelocation->Offset())
-		{
-			// if for some reason the relocation is on a NOP, don't count it
-			if(data[i] == 0x00000000)
-			{
-				*nBytesMatched == i;
-				return false;
-			}
+        if(cur_reltab_index < num_text_relocations && i == curRelocation->Offset())
+        {
+            // if for some reason the relocation is on a NOP, don't count it
+            if(data[i] == 0x00000000)
+            {
+                *nBytesMatched == i;
+                return false;
+            }
 
-			// only check the top 6 bits
-			if((text_sec_data[i] & 0xFC) != (data[i] & 0xFC))
-			{
-				*nBytesMatched = i;
-				return false;
-			}
+            // only check the top 6 bits
+            if((text_sec_data[i] & 0xFC) != (data[i] & 0xFC))
+            {
+                *nBytesMatched = i;
+                return false;
+            }
 
-			cur_reltab_index++;
-			continue;
-		}
+            cur_reltab_index++;
+            continue;
+        }
 
-		// fetch the next relocation
-		// this trusts that the object's relocation offsets are in order from least to greatest
-		//for(int j = cur_reltab_index; j < num_text_relocations; j++)
-		//{
-		//	CElfRelocation* cur_relocation = &text_relocations[j];
-		//	cur_relocation_offset = cur_relocation->Offset();
-		//	
-		//	if(cur_relocation_offset < i)
-		//	{
-		//		continue;
-		//	}
+        // fetch the next relocation
+        // this trusts that the object's relocation offsets are in order from least to greatest
+        //for(int j = cur_reltab_index; j < num_text_relocations; j++)
+        //{
+        //    CElfRelocation* cur_relocation = &text_relocations[j];
+        //    cur_relocation_offset = cur_relocation->Offset();
+        //    
+        //    if(cur_relocation_offset < i)
+        //    {
+        //        continue;
+        //    }
 //
-		//	if(cur_relocation_offset == i)
-		//	{
-		//		have_relocation = true;
-		//	}
-		//}
+        //    if(cur_relocation_offset == i)
+        //    {
+        //        have_relocation = true;
+        //    }
+        //}
 
         if(*(uint32_t*)&text_sec_data[i] != *(uint32_t*)&data[i])
         {
-			*nBytesMatched = i;
+            *nBytesMatched = i;
             return false;
         }
     }
     return true;
 }
 
-void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx)
+bool CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset)
 {
-	CElfContext elf((const char*)objProcessingCtx->blockData, objProcessingCtx->blockSize);
-	CElfSection* textSec = elf.Section(".text");
-
-	if(textSec == NULL)
-	{
-		return;
-	}
-
-	const char* textBuf = textSec->Data(&elf);
-	uint32_t textSize = textSec->Size();
-
-	int endAddress = DataSize() - textSize;
-
-	bool bHaveFullMatch;
-	uint32_t matchedAddress;
-	int nBytesMatched;
-	int bestPartialMatchLength = 0;
-	const char* matchedBlock = NULL;
-
-	for(uint32_t blockAddress = 0; blockAddress < endAddress; blockAddress += sizeof(uint32_t))
-	{
-		const char* block = (const char*)&m_Data[blockAddress];
-		bHaveFullMatch = ElfTextDataCompare(&elf, block, &nBytesMatched);
-
-		if(bHaveFullMatch)
-		{
-			matchedBlock = block;
-			matchedAddress = blockAddress;
-			break;
-		}
-		else if(nBytesMatched > bestPartialMatchLength)
-		{
-			matchedBlock = block;
-			matchedAddress = blockAddress;
-			bestPartialMatchLength = nBytesMatched;
-		}
-	}
-
-	threadPool.LockDefaultMutex();
-
-	Log("%s:%s\n", objProcessingCtx->libraryPath, objProcessingCtx->blockIdentifier);
-
-	if(bHaveFullMatch)
-	{
-		
-		Log("complete match\n");
-		AddSymbolResults(&elf, matchedAddress);
-		AddRelocationResults(&elf, matchedBlock, "__"); // fix me altNamePrefix
-	}
-	else if(bestPartialMatchLength >= 32)
-	{
-		Log("partial match (0x%02X bytes)\n", bestPartialMatchLength);
-		AddSymbolResults(&elf, matchedAddress, bestPartialMatchLength);
-		AddRelocationResults(&elf, matchedBlock, "__", bestPartialMatchLength); // fix me altNamePrefix
-	}
-	else
-	{
-		threadPool.UnlockDefaultMutex();
-		return;
-	}
-
-	for(size_t i = 0; i < textSize; i += 4)
-	{
-		uint32_t buffOp = bswap32(*(uint32_t*)&matchedBlock[i]);
-		uint32_t textOp = bswap32(*(uint32_t*)&textBuf[i]);
-
-		CElfRelocation* relocation = NULL;
-		CElfSymbol* symbol = NULL;
-		bool bHaveRel = false;
-
-		for(int j = 0; j < elf.NumTextRelocations(); j++)
-		{
-			relocation = elf.TextRelocation(j);
-			if(relocation->Offset() == i)
-			{
-				Log("have reloc\n");
-				symbol = relocation->Symbol(&elf);
-				bHaveRel = true;
-			}
-		}
-
-		Log("%08X/%04X: %08X %08X", 0x80000000 | (matchedAddress + i), i, buffOp, textOp);
-		textOp == buffOp ? Log("\n") : Log(" * %s\n", bHaveRel ? symbol->Name(&elf) : "");
-	}
-
-	Log("\n");
-	threadPool.UnlockDefaultMutex();
+    if(sigFile.TestSymbol(nSymbol, &m_Binary[offset]))
+    {
+        search_result_t result;
+        result.address = m_HeaderSize + offset;
+        result.size = sigFile.GetSymbolSize(nSymbol);
+        sigFile.GetSymbolName(nSymbol, result.name, sizeof(result.name));
+        AddResult(result);
+        return true;
+    }
+    return false;
 }
 
-void CN64Sym::ProcessObject(const char* path)
+void CN64Sym::TallyNumSymbolsToCheck()
 {
-    void* buffer;
-    size_t size;
+    m_NumSymbolsToCheck = 0;
 
-	FILE* fp = fopen(path, "rb");
+    if(m_bUseBuiltinSignatures)
+    {
+        m_NumSymbolsToCheck += m_BuiltinSigs.GetNumSymbols();
+    }
 
-    if(fp == NULL)
+    for(size_t i = 0; i < m_LibPaths.size(); i++)
+    {
+        CountSymbolsRecursive(m_LibPaths.at(i));
+    }
+}
+
+size_t CN64Sym::CountSymbolsInFile(const char *path)
+{
+    //printf("counting symbols in %s\n", path);
+
+    if(PathIsSignatureFile(path))
+    {
+        CSignatureFile sigFile;
+        if(sigFile.Load(path))
+        {
+            m_NumSymbolsToCheck += sigFile.GetNumSymbols();
+        }
+    }
+    else if(PathIsStaticLibrary(path))
+    {
+        //printf("path is static library\n");
+
+        CArReader ar;
+        if(ar.Load(path))
+        {
+            while(ar.SeekNextBlock())
+            {
+                CElfContext elf;
+                elf.LoadFromMemory(ar.GetBlockData(), ar.GetBlockSize());
+                m_NumSymbolsToCheck += CountGlobalSymbolsInElf(elf); // probably needs work
+            }
+        }
+    }
+    else if(PathIsObjectFile(path))
+    {
+        CElfContext elf;
+        if(elf.Load(path))
+        {
+            m_NumSymbolsToCheck += CountGlobalSymbolsInElf(elf);
+        }
+    }
+}
+
+size_t CN64Sym::CountGlobalSymbolsInElf(CElfContext& elf)
+{
+    size_t count = 0;
+    int numSymbols = elf.NumSymbols();
+
+    for(int i = 0; i < numSymbols; i++)
+    {
+        CElfSymbol* symbol = elf.Symbol(i);
+        if(symbol->Binding() == STB_GLOBAL &&
+           symbol->Type() != STT_NOTYPE &&
+           symbol->SectionIndex() != SHN_UNDEF &&
+           symbol->Size() > 0)
+        {
+            count++; // probably needs work
+        }
+    }
+    return count;
+}
+
+void CN64Sym::CountSymbolsRecursive(const char* path)
+{
+    if (IsFileWithSymbols(path))
+    {
+        CountSymbolsInFile(path);
+        return;
+    }
+    DIR *dir;
+    dir = opendir(path);
+    if (dir == NULL)
+    {
+        printf("%s is neither a directory or file with symbols.\n", path);
+        return;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        char next_path[PATH_MAX];
+        if (!entry->d_name) continue;
+        snprintf(next_path, sizeof(next_path), "%s/%s", path, entry->d_name);
+        switch (entry->d_type) {
+            case DT_DIR:
+                // skip "." dirs
+                if (entry->d_name[0] == '.')
+                {
+                    continue;
+                }
+                // scan subdirectory
+                ScanRecursive(next_path);
+                break;
+            case DT_REG:
+            {
+                if (IsFileWithSymbols(next_path))
+                {
+                    //printf("next path %s\n", next_path);
+                    CountSymbolsInFile(next_path);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    closedir(dir);
+}
+
+bool CN64Sym::AddResult(search_result_t result)
+{
+    // have link address from jump target
+    if(result.address != 0)
+    {
+        for(int i = 0; i < m_Results.size(); i++)
+        {
+            search_result_t test_result = m_Results.at(i);
+            if(test_result.address == result.address)
+            {
+                return false; // already have
+            }
+        }
+        m_Results.push_back(result);
+        //Log("    %08X %s\n", result.address, result.name);
+        return true;
+    }
+    m_Results.push_back(result);
+}
+
+void CN64Sym::AddSymbolResults(CElfContext* elf, uint32_t baseAddress, int maxTextOffset)
+{
+    int nSymbols = elf->NumSymbols();
+
+    for(int i = nSymbols - 1; i >= 0; i--)
+    {
+        CElfSymbol* symbol = elf->Symbol(i);
+        if(symbol->Binding() == STB_GLOBAL &&
+           symbol->Type() != STT_NOTYPE &&
+           symbol->SectionIndex() != SHN_UNDEF &&
+           symbol->Size() > 0)
+        {
+            if(maxTextOffset > 0 && symbol->Value() >= maxTextOffset)
+            {
+                // exceeds maximum offset for a partial match
+                continue;
+            }
+
+            search_result_t result;
+            //result.file_address = 0;
+            result.address = m_HeaderSize + (baseAddress + symbol->Value());
+            result.size = symbol->Size();
+            strcpy(result.name, symbol->Name(elf));
+
+            Log("adding %s\n", result.name);
+            AddResult(result);
+        }
+    }
+}
+
+void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const char* altNamePrefix, int maxTextOffset)
+{
+    Log("Adding relocation results...\n");
+
+    int nRelocations = elf->NumTextRelocations();
+
+    for(int i = 0; i < nRelocations; i++)
+    {
+        CElfRelocation* relocation = elf->TextRelocation(i);
+        CElfSymbol* symbol = relocation->Symbol(elf);
+        int textOffset = relocation->Offset();
+        uint32_t opcode = bswap32(*(uint32_t*)&block[textOffset]);
+        uint8_t relType = relocation->Type();
+
+        Log("%s %04X\n", symbol->Name(elf), textOffset);
+
+        if(maxTextOffset > 0 && textOffset >= maxTextOffset)
+        {
+            // exceeds maximum offset for a partial match
+            continue;
+        }
+        
+        if(relType == R_MIPS_26 && (opcode >> 26) == 0x0C)
+        {
+            uint32_t jalTarget = m_HeaderSize | ((opcode & 0x3FFFFFF) * 4);
+            
+            search_result_t result;
+            result.address = jalTarget;
+            result.size = 0;
+            strncpy(result.name, symbol->Name(elf), 64);
+
+            if(relocation->SymbolIndex() == 1)
+            {
+                // Static function, compiler tossed out the symbol
+                // Use object file name and text offset as a replacement
+                int len = sprintf(result.name, "%s_%04X", altNamePrefix, textOffset);
+                for(int i = 0; i < len; i++)
+                {
+                    if(result.name[i] == '.')
+                    {
+                        result.name[i] = '_';
+                    }
+                }
+            }
+
+            Log("adding %s (relocation)\n", result.name);
+
+            AddResult(result);
+        }
+        else if(relType == R_MIPS_LO16 && i > 0)
+        {
+            CElfRelocation* prevRelocation = elf->TextRelocation(i - 1);
+
+            if(prevRelocation->Type() == R_MIPS_HI16)
+            {
+                uint32_t upperOp = bswap32(*(uint32_t*)&block[prevRelocation->Offset()]);
+                uint32_t lowerOp = opcode;
+
+                // TODO: Implement
+
+                CElfSymbol* symbol = relocation->Symbol(elf);
+                Log("%04X%04X,data,%s\n", upperOp & 0xFFFF, lowerOp & 0xFFFF, symbol->Name(elf));
+            }
+        }
+    }
+}
+
+bool CN64Sym::ResultCmp(search_result_t a, search_result_t b)
+{
+    return (a.address < b.address);
+}
+
+void CN64Sym::SortResults()
+{
+    std::sort(m_Results.begin(), m_Results.end(), ResultCmp);
+}
+
+void CN64Sym::ClearLine(int nChars)
+{
+    printf("\r");
+    printf("%*s", nChars, "");
+    printf("\r");
+}
+
+void CN64Sym::Log(const char* format, ...)
+{
+    if(!m_bVerbose)
     {
         return;
     }
 
-    fseek(fp, 0, SEEK_END);
-    size = ftell(fp);
-    rewind(fp);
-
-    buffer = malloc(size);
-    fread(buffer, 1, size, fp);
-    fclose(fp);
-
-	Log("%s\n", path);
-
-	obj_processing_context_t objProcessingCtx;
-	objProcessingCtx.mt_this = NULL;
-	objProcessingCtx.libraryPath = NULL;
-	objProcessingCtx.blockIdentifier = path;
-	objProcessingCtx.blockData = buffer;
-	objProcessingCtx.blockSize = size;
-
-	ProcessObject(&objProcessingCtx);
-
-	free(buffer);
-}
-
-void* CN64Sym::ProcessObjectProc(void* _objProcessingCtx)
-{
-	obj_processing_context_t* objProcessingCtx = (obj_processing_context_t*)_objProcessingCtx;
-	CN64Sym* _this = objProcessingCtx->mt_this;
-
-	_this->ProcessObject(objProcessingCtx);
-
-	delete objProcessingCtx;
-}
-
-void CN64Sym::ProcessLibrary(const char* path)
-{
-	CArReader ar(path);
-
-	while(ar.SeekNextBlock())
-	{
-		// worker thread will delete objProcessingCtx after it's done
-		obj_processing_context_t* objProcessingCtx = new obj_processing_context_t;
-		objProcessingCtx->mt_this = this;
-		objProcessingCtx->libraryPath = path;
-		objProcessingCtx->blockIdentifier = ar.GetBlockIdentifier();
-		objProcessingCtx->blockData = ar.GetBlockData();
-		objProcessingCtx->blockSize = ar.GetBlockSize();
-
-		threadPool.AddWorker(ProcessObjectProc, (void*)objProcessingCtx);
-	}
-
-	threadPool.WaitForWorkers();
-}
-
-// returns true if 'str' ends with 'suffix'
-bool CN64Sym::EndsWith(const char *str, const char *suffix)
-{
-	if (!str || !suffix)
-	{
-		return false;
-	}
-	size_t len_str = strlen(str);
-	size_t len_suffix = strlen(suffix);
-	if (len_suffix > len_str)
-	{
-		return false;
-	}
-	return (0 == strncmp(str + len_str - len_suffix, suffix, len_suffix));
-}
-
-bool CN64Sym::PathIsStaticLibrary(const char *path)
-{
-	if (strlen(path) < 3)
-	{
-		return false;
-	}
-	return EndsWith(path, ".a") || EndsWith(path, ".A");
-}
-
-bool CN64Sym::PathIsObjectFile(const char *path)
-{
-	if (strlen(path) < 3)
-	{
-		return false;
-	}
-	return EndsWith(path, ".o") || EndsWith(path, ".O");
-}
-
-bool CN64Sym::IsFileWithSymbols(const char *path)
-{
-	return PathIsStaticLibrary(path) || PathIsObjectFile(path);
-}
-
-void CN64Sym::ProcessFile(const char* filePath)
-{
-	//Log("%s\n", filePath);
-	if (PathIsStaticLibrary(filePath))
-	{
-		ProcessLibrary(filePath);
-	}
-	else if (PathIsObjectFile(filePath))
-	{
-		ProcessObject(filePath);
-	}
-}
-
-void CN64Sym::ScanRecursive(const char* path)
-{
-	if (IsFileWithSymbols(path))
-	{
-		ProcessFile(path);
-		return;
-	}
-	DIR *dir;
-	dir = opendir(path);
-	if (dir == NULL)
-	{
-		printf("%s is neither a directory or file with symbols.\n", path);
-		return;
-	}
-	struct dirent *entry;
-	while ((entry = readdir(dir)) != NULL)
-	{
-		char next_path[PATH_MAX];
-		if (!entry->d_name) continue;
-		snprintf(next_path, sizeof(next_path), "%s/%s", path, entry->d_name);
-		switch (entry->d_type) {
-			case DT_DIR:
-				// skip "." dirs
-				if (entry->d_name[0] == '.')
-				{
-					continue;
-				}
-				// scan subdirectory
-				ScanRecursive(next_path);
-				break;
-			case DT_REG:
-			{
-				if (IsFileWithSymbols(next_path))
-				{
-					//printf("next path %s\n", next_path);
-					ProcessFile(next_path);
-				}
-				break;
-			}
-			default:
-				break;
-		}
-	}
-	closedir(dir);
-}
-
-bool CN64Sym::Run()
-{
-	for(int i = 0; i < m_LibPaths->size(); i++)
-	{
-		ScanRecursive(m_LibPaths->at(i));
-	}
-
-	Log("\n");
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
 }

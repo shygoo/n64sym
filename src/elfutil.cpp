@@ -3,7 +3,7 @@
     elfutil
 
     Basic 32-bit big endian ELF reader
-    shygoo 2018
+    shygoo 2018, 2020
     License: MIT
 
     https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
@@ -12,13 +12,44 @@
 
 */
 
+#include <fstream>
 #include <stdint.h>
 #include "elfutil.h"
 
-CElfContext::CElfContext(const char* elfBuffer, size_t elfBufferSize):
-    m_ElfHeader((CElfHeader*)elfBuffer),
-    m_Size(elfBufferSize)
+CElfContext::CElfContext():
+    m_Buffer(NULL),
+    m_Size(0)
 {
+}
+
+bool CElfContext::Load(const char *path)
+{
+    std::ifstream file;
+    file.open(path, std::ifstream::binary);
+    if(!file.is_open())
+    {
+        return false;
+    }
+    file.seekg(0, file.end);
+    m_Size = file.tellg();
+    file.seekg(0, file.beg);
+    m_Buffer = new uint8_t[m_Size];
+    file.read((char *)m_Buffer, m_Size);
+    return true;
+}
+
+bool CElfContext::LoadFromMemory(uint8_t *buffer, size_t size)
+{
+    if(m_Buffer != NULL)
+    {
+        delete[] m_Buffer;
+    }
+
+    m_Size = size;
+    m_Buffer = new uint8_t[m_Size];
+    memcpy(m_Buffer, buffer, m_Size);
+
+    return true;
 }
 
 //////////////
@@ -37,7 +68,7 @@ CElfSection* CElfContext::Section(int index)
         return NULL;
     }
 
-    return (CElfSection*)((char*)m_ElfHeader + offset);
+    return (CElfSection*)((char*)m_Buffer + offset);
 }
 
 CElfSection* CElfContext::Section(const char* name)
@@ -46,7 +77,9 @@ CElfSection* CElfContext::Section(const char* name)
     for(int i = 0; i < nsecs; i++)
     {
         CElfSection* sec = Section(i);
-        if(strcmp(sec->Name(this), name) == 0)
+        const char *curName = sec->Name(this);
+
+        if(curName != NULL &&strcmp(curName, name) == 0)
         {
             return sec;
         }
@@ -60,7 +93,9 @@ bool CElfContext::SectionIndexOf(const char* name, int* index)
     for(int i = 0; i < nsecs; i++)
     {
         CElfSection* sec = Section(i);
-        if(strcmp(sec->Name(this), name) == 0)
+        const char *curName = sec->Name(this);
+
+        if(curName != NULL && strcmp(sec->Name(this), name) == 0)
         {
             *index = i;
             return true;

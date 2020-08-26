@@ -3,7 +3,7 @@
     arutil
 
     Basic GNU *.a reader utility
-    shygoo 2018
+    shygoo 2018, 2020
     License: MIT
 
     https://en.wikipedia.org/wiki/Ar_(Unix)
@@ -14,6 +14,7 @@
 #define ARUTIL_H
 
 #include <stdlib.h>
+#include <stdint.h>
 
 #define AR_FILE_SIG "!<arch>\n"
 #define AR_FILE_SIG_LEN 8
@@ -33,22 +34,24 @@ class CArReader
 
     char* m_CurRealIdentifier;
     char* m_ExIdentifierBlock;
-    char* m_CurBlock;
+    uint8_t* m_CurBlock;
     size_t m_CurBlockSize;
     
-    char* m_Buffer;
+    uint8_t* m_Buffer;
     size_t m_Size;
     size_t m_CurPos;
 
     static char* ArTrimIdentifier(char* str);
 
 public:
-    CArReader(const char* path);
+    CArReader();
     ~CArReader();
+
+    bool Load(const char *path);
 
     bool SeekNextBlock();
     const char* GetBlockIdentifier();
-    void* GetBlockData();
+    uint8_t* GetBlockData();
     size_t GetBlockSize();
 };
 

@@ -3,13 +3,14 @@
     arutil
 
     Basic GNU *.a reader utility
-    shygoo 2018
+    shygoo 2018, 2020
     License: MIT
 
     https://en.wikipedia.org/wiki/Ar_(Unix)
 
 */
 
+#include <fstream>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -29,7 +30,7 @@ char* CArReader::ArTrimIdentifier(char* str)
     return org;
 }
 
-CArReader::CArReader(const char* path):
+CArReader::CArReader():
         m_CurRealIdentifier(NULL),
         m_ExIdentifierBlock(NULL),
         m_CurBlock(NULL),
@@ -38,19 +39,39 @@ CArReader::CArReader(const char* path):
         m_Size(0),
         m_CurPos(0)
 {
-    FILE* fp = fopen(path, "rb");
+}
 
-    if(fp == NULL)
+CArReader::~CArReader()
+{
+    if(m_Buffer != NULL)
     {
-        return;
+        delete[] m_Buffer;
+    }
+}
+
+bool CArReader::Load(const char *path)
+{
+    if(m_Buffer != NULL)
+    {
+        delete[] m_Buffer;
+        m_CurPos = 0;
+        m_Size = 0;
     }
 
-    fseek(fp, 0, SEEK_END);
-    m_Size = ftell(fp);
-    rewind(fp);
-    m_Buffer = (char*)malloc(m_Size);
-    fread(m_Buffer, 1, m_Size, fp);
-    fclose(fp);
+    std::ifstream file;
+    file.open(path, std::ifstream::binary);
+
+    if(!file.is_open())
+    {
+        return false;
+    }
+
+    file.seekg(0, file.end);
+    m_Size = file.tellg();
+
+    file.seekg(0, file.beg);
+    m_Buffer = new uint8_t[m_Size];
+    file.read((char *)m_Buffer, m_Size);
 
     if(memcmp(AR_FILE_SIG, m_Buffer, AR_FILE_SIG_LEN) == 0)
     {
@@ -58,18 +79,14 @@ CArReader::CArReader(const char* path):
     }
     else
     {
-        free(m_Buffer);
         m_Buffer = NULL;
-        return;
+        m_CurPos = 0;
+        m_Size = 0;
+        delete[] m_Buffer;
+        return false;
     }
-}
 
-CArReader::~CArReader()
-{
-    if(m_Buffer != NULL)
-    {
-        free(m_Buffer);
-    }
+    return true;
 }
 
 bool CArReader::SeekNextBlock()
@@ -89,29 +106,29 @@ bool CArReader::SeekNextBlock()
     {
         if(header->szIdentifier[1] == '/')
         {
-			// extended identifier block
-            m_ExIdentifierBlock = m_Buffer + m_CurPos;
+            // extended identifier block
+            m_ExIdentifierBlock = (char *)&m_Buffer[m_CurPos];
             m_CurPos += blockSize;
             SeekNextBlock();
             return true;
         }
-		
-		if(header->szIdentifier[1] == ' ')
+        
+        if(header->szIdentifier[1] == ' ')
         {
             // symbol reference block, skip
             m_CurPos += blockSize;
             SeekNextBlock();
             return true;
         }
-		
-		// block uses extended identifier
-		size_t exIdentifierOffset = atoll(&header->szIdentifier[1]);
-		m_CurRealIdentifier = ArTrimIdentifier(&m_ExIdentifierBlock[exIdentifierOffset]);
+        
+        // block uses extended identifier
+        size_t exIdentifierOffset = atoll(&header->szIdentifier[1]);
+        m_CurRealIdentifier = ArTrimIdentifier(&m_ExIdentifierBlock[exIdentifierOffset]);
     }
-	else
-	{
-		m_CurRealIdentifier = ArTrimIdentifier(header->szIdentifier);
-	}
+    else
+    {
+        m_CurRealIdentifier = ArTrimIdentifier(header->szIdentifier);
+    }
 
     m_CurBlock = &m_Buffer[m_CurPos];
     m_CurBlockSize = blockSize;
@@ -129,7 +146,7 @@ const char* CArReader::GetBlockIdentifier()
     return m_CurRealIdentifier;
 }
 
-void* CArReader::GetBlockData()
+uint8_t* CArReader::GetBlockData()
 {
     return m_CurBlock;
 }

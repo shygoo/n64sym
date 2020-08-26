@@ -1,3 +1,6 @@
 bin
 obj
 test
+oslibs
+.vscode
+build
