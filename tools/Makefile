@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-static -I../include -I./src -O3 -s
+CFLAGS=-static -I../include -I./src -O3 -s -Wno-unused-result
 
 SRC_DIR=src
 BIN_DIR=bin
