@@ -428,6 +428,11 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile)
 {
     size_t numSymbols = sigFile.GetNumSymbols();
 
+    const char *statusDescription = "(built-in signatures)";
+
+    int percentDone = 0;
+    int statusLineLen = printf("[  0%%] %s", statusDescription);
+
     for(size_t nSymbol = 0; nSymbol < numSymbols; nSymbol++)
     {
         uint32_t symbolSize = sigFile.GetSymbolSize(nSymbol);
@@ -435,7 +440,14 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile)
         char symbolName[128];
         sigFile.GetSymbolName(nSymbol, symbolName, sizeof(symbolName));
 
-        int progressLineLength = printf("(%zu/%zu) %s", nSymbol, numSymbols, symbolName);
+        int percentNow = (int)(((float)nSymbol / numSymbols) * 100);
+
+        if(percentNow > percentDone)
+        {
+            ClearLine(statusLineLen);
+            statusLineLen = printf("[%3d%%] %s", percentDone, statusDescription);
+            percentDone = percentNow;
+        }
 
         for(auto offset : m_LikelyFunctionOffsets)
         {
@@ -456,9 +468,10 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile)
             }
         }
 
-        next_symbol:
-        ClearLine(progressLineLength);
+        next_symbol:;
     }
+
+    ClearLine(statusLineLen);
 }
 
 bool CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesMatched)
