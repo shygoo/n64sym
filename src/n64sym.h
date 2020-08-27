@@ -22,6 +22,15 @@
 #include "signaturefile.h"
 #include "pathutil.h"
 
+typedef enum
+{
+    N64SYM_FMT_DEFAULT,
+    N64SYM_FMT_PJ64,
+    N64SYM_FMT_NEMU,
+    N64SYM_FMT_ARMIPS,
+    N64SYM_FMT_N64SPLIT
+} n64sym_output_fmt_t;
+
 class CN64Sym
 {
 public:
@@ -32,10 +41,20 @@ public:
     void UseBuiltinSignatures(bool bUseBuiltinSignatures);
     void SetVerbose(bool bVerbose);
     void SetThoroughScan(bool bThorough);
+    bool SetOutputFormat(const char *fmtName);
+    void SetHeaderSize(uint32_t headerSize);
     bool Run();
     void DumpResults();
-
+    
 private:
+    typedef struct
+    {
+        const char *name;
+        n64sym_output_fmt_t fmt;
+    } n64sym_fmt_lut_t;
+
+    static n64sym_fmt_lut_t FormatNames[];
+
     typedef struct
     {
         CN64Sym* mt_this;
@@ -67,6 +86,9 @@ private:
     bool     m_bVerbose;
     bool     m_bUseBuiltinSignatures;
     bool     m_bThoroughScan;
+    bool     m_bOverrideHeaderSize;
+
+    n64sym_output_fmt_t m_OutputFormat;
 
     size_t m_NumSymbolsToCheck;
     size_t m_NumSymbolsChecked;

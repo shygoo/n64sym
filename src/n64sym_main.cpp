@@ -25,9 +25,11 @@ int main(int argc, const char* argv[])
             "n64sym - N64 symbol identification tool\n\n"
             "  Usage: n64sym <binary path> [options]\n\n"
             "  Options:\n"
-            "    -l <sig/lib/obj path(s)>   scan for symbols from signature/library/object file(s)\n"
             "    -s                         scan for symbols from built-in signature file\n"
-            "    -t                         enable thorough scanning\n"
+            "    -l <sig/lib/obj path(s)>   scan for symbols from signature/library/object file(s)\n"
+            "    -f <format>                set the output format (pj64, nemu, armips, n64split, default)\n"
+            "    -h <headersize>            set the headersize (default: 0x80000000)"
+            "    -t                         scan thoroughly\n"
             "    -v                         enable verbose logging\n"
         );
         
@@ -38,7 +40,7 @@ int main(int argc, const char* argv[])
     
     if(!n64sym.LoadBinary(binPath))
     {
-        printf("Error: Failed load '%s'\n", binPath);
+        printf("Error: Failed to load '%s'\n", binPath);
         return EXIT_FAILURE;
     }
     
@@ -67,6 +69,28 @@ int main(int argc, const char* argv[])
             break;
         case 'v':
             n64sym.SetVerbose(true);
+            break;
+        case 'f':
+            if(argi+1 >= argc)
+            {
+                printf("Error: no output format specified for '-f'\n");
+                return EXIT_FAILURE;
+            }
+            if(!n64sym.SetOutputFormat(argv[argi+1]))
+            {
+                printf("Error: invalid output format '%s'\n", argv[argi+1]);
+                return EXIT_FAILURE;
+            }
+            argi++;
+            break;
+        case 'h':
+            if(argi+1 >= argc)
+            {
+                printf("Error: no header size specified for '-h'\n");
+                return EXIT_FAILURE;
+            }
+            n64sym.SetHeaderSize(strtoul(argv[argi+1], NULL, 0));
+            argi++;
             break;
         default:
             printf("Error: Invalid switch '%s'\n", argv[argi]);

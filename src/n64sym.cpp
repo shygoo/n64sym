@@ -17,12 +17,21 @@
 #include "builtin_signatures.h"
 #include "signaturefile.h"
 #include "pathutil.h"
+#include "crc32.h"
 
 #ifdef WIN32
 #include <windirent.h>
 #else
 #include <dirent.h>
 #endif
+
+CN64Sym::n64sym_fmt_lut_t CN64Sym::FormatNames[] = {
+    { "default",  N64SYM_FMT_DEFAULT },
+    { "pj64",     N64SYM_FMT_PJ64 },
+    { "nemu",     N64SYM_FMT_NEMU },
+    { "armips",   N64SYM_FMT_ARMIPS },
+    { "n64split", N64SYM_FMT_N64SPLIT }
+};
 
 CN64Sym::CN64Sym() :
     m_Binary(NULL),
@@ -31,6 +40,8 @@ CN64Sym::CN64Sym() :
     m_bVerbose(false),
     m_bUseBuiltinSignatures(false),
     m_bThoroughScan(false),
+    m_bOverrideHeaderSize(false),
+    m_OutputFormat(N64SYM_FMT_DEFAULT),
     m_NumSymbolsToCheck(0),
     m_NumSymbolsChecked(0)
 {
@@ -76,7 +87,7 @@ bool CN64Sym::LoadBinary(const char *binPath)
     m_Binary = new uint8_t[m_BinarySize];
     file.read((char *)m_Binary, m_BinarySize);
 
-    if(PathIsN64Rom(binPath))
+    if(PathIsN64Rom(binPath) && !m_bOverrideHeaderSize)
     {
         if(m_BinarySize < 0x101000)
         {
@@ -106,6 +117,21 @@ bool CN64Sym::LoadBinary(const char *binPath)
         }
 
         uint32_t entryPoint = bswap32(*(uint32_t *)&m_Binary[0x08]);
+
+        uint32_t bootCheck = crc32_begin();
+        crc32_read(&m_Binary[0x40], 0xFC0, &bootCheck);
+        crc32_end(&bootCheck);
+
+        switch(bootCheck)
+        {
+        case 0x0B050EE0: // 6103
+            entryPoint -= 0x100000;
+            break;
+        case 0xACC8580A: // 6106
+            entryPoint -= 0x200000;
+            break;
+        }
+        
         m_HeaderSize = entryPoint - 0x1000;
     }
 
@@ -130,6 +156,29 @@ void CN64Sym::UseBuiltinSignatures(bool bUseBuiltinSignatures)
 void CN64Sym::SetThoroughScan(bool bThoroughScan)
 {
     m_bThoroughScan = bThoroughScan;
+}
+
+bool CN64Sym::SetOutputFormat(const char *fmtName)
+{
+    size_t numFormats = sizeof(FormatNames) / sizeof(FormatNames[0]);
+
+    for(size_t i = 0; i < numFormats; i++)
+    {
+        if(strcmp(FormatNames[i].name, fmtName) == 0)
+        {
+            m_OutputFormat = FormatNames[i].fmt;
+            return true;
+        }
+    }
+
+    m_OutputFormat = N64SYM_FMT_DEFAULT;
+    return false;
+}
+
+void CN64Sym::SetHeaderSize(uint32_t headerSize)
+{
+    m_bOverrideHeaderSize = true;
+    m_HeaderSize = headerSize;
 }
 
 bool CN64Sym::Run()
@@ -182,10 +231,37 @@ bool CN64Sym::Run()
 
 void CN64Sym::DumpResults()
 {
-    for(size_t i = 0; i < m_Results.size(); i++)
+    switch(m_OutputFormat)
     {
-        search_result_t result = m_Results.at(i);
-        printf("%08X,code,%s\n", result.address, result.name);
+    case N64SYM_FMT_PJ64:
+        for(auto& result : m_Results)
+        {
+            printf("%08X,code,%s\n", result.address, result.name);
+        }
+        break;
+    case N64SYM_FMT_NEMU:
+
+        break;
+    case N64SYM_FMT_ARMIPS:
+        for(auto& result : m_Results)
+        {
+            printf(".definelabel %s, 0x%08X\n", result.name, result.address);
+        }
+        break;
+    case N64SYM_FMT_N64SPLIT:
+        printf("labels:\n");
+        for(auto &result : m_Results)
+        {
+            printf("   - [0x%08X, \"%s\"]\n", result.address, result.name);
+        }
+        break;
+    case N64SYM_FMT_DEFAULT:
+    default:
+        for(auto& result : m_Results)
+        {
+            printf("%08X %s\n", result.address, result.name);
+        }
+        break;
     }
 }
 
