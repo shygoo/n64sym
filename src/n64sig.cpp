@@ -141,7 +141,7 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t& rel
         char relSymbolName[128];
 
         CElfSymbol *relSymbol = relocation->Symbol(&elf);
-        strncpy(relSymbolName, relSymbol->Name(&elf), sizeof(relSymbolName));
+        strncpy(relSymbolName, relSymbol->Name(&elf), sizeof(relSymbolName) - 1);
         uint8_t relType = relocation->Type();
         const char *relTypeName = GetRelTypeName(relocation->Type());
 
@@ -175,7 +175,7 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t& rel
 
         reloc_entry_t relocEntry;
         relocEntry.relocType = relType;
-        strncpy(relocEntry.relocSymbolName, relSymbolName, sizeof(relocEntry.relocSymbolName));
+        strncpy(relocEntry.relocSymbolName, relSymbolName, sizeof(relocEntry.relocSymbolName) - 1);
 
         relocs[relocEntry].push_back(relOffset - symbolOffset);
     }
@@ -244,7 +244,7 @@ void CN64Sig::ProcessObject(CElfContext& elf, const char *objectName)
         }
 
         symbol_entry_t symbolEntry;
-        strncpy(symbolEntry.name, symbolName, sizeof(symbolEntry.name));
+        strncpy(symbolEntry.name, symbolName, sizeof(symbolEntry.name) - 1);
         symbolEntry.relocs = new reloc_map_t;
 
         //reloc_map_t relocs;

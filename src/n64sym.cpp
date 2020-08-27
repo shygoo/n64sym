@@ -756,7 +756,7 @@ void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const ch
             search_result_t result;
             result.address = jalTarget;
             result.size = 0;
-            strncpy(result.name, symbol->Name(elf), sizeof(result.name));
+            strncpy(result.name, symbol->Name(elf), sizeof(result.name) - 1);
 
             if(relocation->SymbolIndex() == 1)
             {
