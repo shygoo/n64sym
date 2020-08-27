@@ -435,7 +435,7 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile)
         char symbolName[128];
         sigFile.GetSymbolName(nSymbol, symbolName, sizeof(symbolName));
 
-        int progressLineLength = printf("(%llu/%llu) %s", nSymbol, numSymbols, symbolName);
+        int progressLineLength = printf("(%zu/%zu) %s", nSymbol, numSymbols, symbolName);
 
         for(auto offset : m_LikelyFunctionOffsets)
         {
@@ -756,7 +756,7 @@ void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const ch
             search_result_t result;
             result.address = jalTarget;
             result.size = 0;
-            strncpy(result.name, symbol->Name(elf), 64);
+            strncpy(result.name, symbol->Name(elf), sizeof(result.name));
 
             if(relocation->SymbolIndex() == 1)
             {
