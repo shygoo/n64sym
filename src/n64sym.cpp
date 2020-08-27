@@ -338,6 +338,11 @@ void CN64Sym::ProcessLibrary(const char* path)
 
     while(ar.SeekNextBlock())
     {
+        if(!PathIsObjectFile(ar.GetBlockIdentifier()))
+        {
+            continue;
+        }
+
         // worker thread will delete objProcessingCtx after it's done
         obj_processing_context_t* objProcessingCtx = new obj_processing_context_t;
         objProcessingCtx->mt_this = this;
@@ -687,6 +692,11 @@ void CN64Sym::CountSymbolsInFile(const char *path)
         {
             while(ar.SeekNextBlock())
             {
+                if(!PathIsObjectFile(ar.GetBlockIdentifier()))
+                {
+                    continue;
+                }
+
                 CElfContext elf;
                 elf.LoadFromMemory(ar.GetBlockData(), ar.GetBlockSize());
                 m_NumSymbolsToCheck += CountGlobalSymbolsInElf(elf); // probably needs work

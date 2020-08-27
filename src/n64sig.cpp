@@ -197,6 +197,11 @@ void CN64Sig::ProcessLibrary(const char *path)
         uint8_t    *objectData = arReader.GetBlockData();
         size_t      objectSize = arReader.GetBlockSize();
 
+        if(!PathIsObjectFile(objectName))
+        {
+            continue;
+        }
+
         elf.LoadFromMemory(objectData, objectSize);
 
         ProcessObject(elf, objectName);
