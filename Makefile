@@ -1,8 +1,8 @@
 CC=g++
-CFLAGS=-static -pthread -I./include -I./build -O3 -s -Wall -Wno-unused-function -Wno-strict-aliasing -Wno-unused-result
+CFLAGS=-static -I./include -I./build -O3 -s -Wall -Wno-unused-function -Wno-strict-aliasing -Wno-unused-result
 
 LD=g++
-LDFLAGS=-s -Wl,--gc-sections,-lm
+LDFLAGS=-s -Wl,--gc-sections,-lm,-lpthread
 
 SRC_DIR=src
 OBJ_DIR=obj
@@ -49,7 +49,7 @@ N64SYM_OBJECTS=$(addprefix $(OBJ_DIR)/,$(addsuffix .o, $(N64SYM_FILES)))
 N64SIG_OBJECTS=$(addprefix $(OBJ_DIR)/,$(addsuffix .o, $(N64SIG_FILES)))
 
 $(N64SYM): $(N64SYM_OBJECTS) include/miniz/miniz.c | $(BIN_DIR)
-	$(LD) $(LDFLAGS) $(N64SYM_OBJECTS) -o $(N64SYM)
+	$(LD) $(N64SYM_OBJECTS) -o $(N64SYM) $(LDFLAGS)
 
 $(N64SIG): $(N64SIG_OBJECTS) | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $(N64SIG_OBJECTS) -o $(N64SIG)

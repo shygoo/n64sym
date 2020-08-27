@@ -50,8 +50,8 @@ bool CN64Sig::Run()
 
     if(m_bVerbose)
     {
-        printf("# %llu symbols\n", m_SymbolMap.size());
-        printf("# %llu processed\n", m_NumProcessedSymbols);
+        printf("# %zu symbols\n", m_SymbolMap.size());
+        printf("# %zu processed\n", m_NumProcessedSymbols);
     }
 
     for(auto& i : m_SymbolMap)
@@ -130,7 +130,7 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t& rel
     for(int nRel = 0; nRel < numTextRelocations; nRel++)
     {
         CElfRelocation *relocation = elf.TextRelocation(nRel);
-        
+
         uint32_t relOffset = relocation->Offset();
 
         if(relOffset < symbolOffset || relOffset >= symbolOffset + symbolSize)
@@ -170,12 +170,12 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t& rel
 
         if(relTypeName == NULL)
         {
-            continue; 
+            continue;
         }
 
         reloc_entry_t relocEntry;
         relocEntry.relocType = relType;
-        strncpy(relocEntry.relocSymbolName, relSymbolName, sizeof(relocEntry.relocSymbolName) - 1);
+        strncpy(relocEntry.relocSymbolName, relSymbolName, sizeof(relocEntry.relocSymbolName));
 
         relocs[relocEntry].push_back(relOffset - symbolOffset);
     }
@@ -198,7 +198,7 @@ void CN64Sig::ProcessLibrary(const char *path)
         size_t      objectSize = arReader.GetBlockSize();
 
         elf.LoadFromMemory(objectData, objectSize);
-        
+
         ProcessObject(elf, objectName);
     }
 }
@@ -327,7 +327,7 @@ void CN64Sig::ScanRecursive(const char* path)
         {
             continue;
         }
-        
+
         snprintf(next_path, sizeof(next_path), "%s/%s", path, entry->d_name);
 
         switch (entry->d_type)
