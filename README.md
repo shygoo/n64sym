@@ -6,6 +6,12 @@
 
     n64sym <input path> [options] 
 
+### `<input path>`
+
+Sets the path of the file to scan. The input file may either be a RAM dump or ROM image.
+
+If the file extension is `.z64`, `.n64`, or `.v64`, the tool will assume the file is a ROM image and attempt to identify the position of the main code segment and adjust the symbol addresses accordingly. Note that scanning a ROM image may yield inaccurate results; using a RAM dump for the input file is recommended.
+
 ## Options
 
     -s                        scan for symbols from the built-in signature file
@@ -15,19 +21,13 @@
     -t                        scan thoroughly
     -v                        enable verbose logging
 
-### `<input path>`
-
-Sets the path of the file to scan. The input file may either be a RAM dump or ROM image.
-
-If the file extension is `.z64`, `.n64`, or `.v64`, the tool will assume the file is a ROM image and attempt to identify the position of the main code segment and adjust the symbol addresses accordingly. Note that scanning a ROM image may yield inaccurate results; using a RAM dump for the input file is recommended.
-
 ### `-s`
 
 Scans against the built-in signature file. See [Included Libraries](included-libs.md) for a list of currently included libraries.
 
-### `-l <library/object path(s)>`
+### `-l <sig/lib/obj path(s)>`
 
-Scans against ELF libraries and objects. If a directory path is provided, `n64sym` will use all `*.a` and `*.o` files that it finds in the directory tree.
+Scans against signature files and ELF libraries/objects. If a directory path is provided, `n64sym` will use all `*.sig`, `*.a` and `*.o` files that it finds in the directory tree.
 
 ### `-f <format>`
 
@@ -53,10 +53,18 @@ Scan thoroughly. When this option is enabled, the scanner will check every byte 
 
 Enable verbose logging.
 
-## Example
+## Examples
+```
+n64sym paper_mario_ram.bin -s -f "pj64" > "C:/Project64/Save/PAPER MARIO.sym"
+```
 
-    n64sym paper_mario.bin -b > paper_mario_symbols.sym
+```
+n64sym "Super Mario 64 (U).z64" -s -f "n64split" > "sm64config.yaml"
+```
 
+```
+n64sym "Ronaldinho Soccer 64.z64" -l "./libultra" | grep "osPiStartDma"
+```
 ---
 
 # n64sig utility
