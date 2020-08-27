@@ -1,7 +1,21 @@
+/*
+
+    n64sig
+    Signature file generator for n64sym
+    shygoo 2020
+    License: MIT
+
+*/
+
+#ifdef WIN32
+#include <windirent.h>
+#else
+#include <dirent.h>
+#endif
+
 #include "n64sig.h"
 #include "arutil.h"
 #include "pathutil.h"
-#include "dirent.h"
 #include "crc32.h"
 
 #ifndef min
@@ -36,8 +50,8 @@ bool CN64Sig::Run()
 
     if(m_bVerbose)
     {
-        printf("# %d symbols\n", m_SymbolMap.size());
-        printf("# %d processed\n", m_NumProcessedSymbols);
+        printf("# %llu symbols\n", m_SymbolMap.size());
+        printf("# %llu processed\n", m_NumProcessedSymbols);
     }
 
     for(auto& i : m_SymbolMap)
@@ -79,6 +93,8 @@ bool CN64Sig::Run()
             delete symbolEntry.relocs;
         }
     }
+
+    return true;
 }
 
 const char *CN64Sig::GetRelTypeName(uint8_t relType)
@@ -130,7 +146,7 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t& rel
         const char *relTypeName = GetRelTypeName(relocation->Type());
 
         const uint8_t *textData = (const uint8_t *)elf.Section(".text")->Data(&elf);
-        const uint8_t *test = &textData[relocation->Offset()];
+        //const uint8_t *test = &textData[relocation->Offset()];
         uint8_t *opcode = (uint8_t *) &textData[relocation->Offset()];
 
         if(relType == 5 || relType == 6)
@@ -191,7 +207,7 @@ void CN64Sig::ProcessObject(CElfContext& elf, const char *objectName)
 {
     CElfSection *textSection;
     const uint8_t *textData;
-    size_t textSize;
+    //size_t textSize;
     int indexOfText;
 
     // todo rename IndexOfSection
@@ -204,7 +220,7 @@ void CN64Sig::ProcessObject(CElfContext& elf, const char *objectName)
 
     textSection = elf.Section(indexOfText);
     textData = (const uint8_t*)textSection->Data(&elf);
-    textSize = textSection->Size();
+    //textSize = textSection->Size();
 
     int numSymbols = elf.NumSymbols();
 

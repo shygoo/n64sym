@@ -274,7 +274,7 @@ bool CSignatureFile::Load(const char *path)
 void CSignatureFile::Parse()
 {
     const char *token;
-    while(token = GetNextToken())
+    while((token = GetNextToken()))
     {
         top_level:
         
@@ -284,7 +284,7 @@ void CSignatureFile::Parse()
             int relocType = GetRelocationDirectiveValue(token);
             if(relocType == -1)
             {
-                printf("error: invalid relocation directive '%s'\n");
+                printf("error: invalid relocation directive '%s'\n", token);
                 goto errored;
             }
 
@@ -300,7 +300,7 @@ void CSignatureFile::Parse()
                 m_Symbols.back().relocs = new std::vector<reloc_t>;
             }
             
-            while(token = GetNextToken())
+            while((token = GetNextToken()))
             {
                 uint32_t offset;
                 if(!ParseNumber(token, &offset))
@@ -408,5 +408,5 @@ bool CSignatureFile::ParseNumber(const char *str, uint32_t *result)
 {
     char *endp;
     *result = strtoull(str, &endp, 0);
-    return (endp - str) == strlen(str);
+    return (size_t)(endp - str) == strlen(str);
 }

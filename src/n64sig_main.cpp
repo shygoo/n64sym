@@ -7,19 +7,6 @@
 
 */
 
-//#include <string.h>
-//#include <stdio.h>
-//#include <vector>
-//#include <map>
-//#include <dirent.h>
-//#include <fstream>
-//
-//#include "crc32.h"
-//#include "arutil.h"
-//#include "elfutil.h"
-//#include "pathutil.h"
-
-
 #include <cstdio>
 #include <cstdlib>
 

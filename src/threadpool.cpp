@@ -49,6 +49,7 @@ void* CThreadPool::RoutineProc(void* _worker)
     worker_context_t* worker = (worker_context_t*) _worker;
     worker->routine(worker->param);
     worker->bRunning = false;
+    return NULL;
 }
 
 void CThreadPool::AddWorker(worker_routine_t routine, void* param)

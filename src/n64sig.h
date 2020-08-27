@@ -1,3 +1,12 @@
+/*
+
+    n64sig
+    Signature file generator for n64sym
+    shygoo 2020
+    License: MIT
+
+*/
+
 #include <cstdint>
 #include <string>
 #include <map>
@@ -41,9 +50,10 @@ class CN64Sig
 
     std::map<uint32_t, symbol_entry_t> m_SymbolMap;
     std::vector<const char *> m_LibPaths;
-    size_t m_NumProcessedSymbols;
-    bool   m_bVerbose;
 
+    bool   m_bVerbose;
+    size_t m_NumProcessedSymbols;
+    
     static const char *GetRelTypeName(uint8_t relType);
     static void FormatAnonymousSymbol(char *symbolName);
     void StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t& relocs, CElfSymbol *symbol, CElfContext& elf);

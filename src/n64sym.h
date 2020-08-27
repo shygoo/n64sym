@@ -11,7 +11,6 @@
 #define N64SYM_H
 
 #include <stdarg.h>
-#include <dirent.h>
 #include <stdlib.h>
 #include <vector>
 #include <algorithm>
@@ -65,17 +64,18 @@ private:
     size_t   m_BinarySize;
     uint32_t m_HeaderSize;
 
+    bool     m_bVerbose;
+    bool     m_bUseBuiltinSignatures;
+    bool     m_bThoroughScan;
+
+    size_t m_NumSymbolsToCheck;
+    size_t m_NumSymbolsChecked;
+
+    pthread_mutex_t m_ProgressMutex;
+
     std::vector<search_result_t> m_Results;
     std::vector<const char*> m_LibPaths;
     std::set<uint32_t> m_LikelyFunctionOffsets;
-
-    bool m_bVerbose;
-    bool m_bUseBuiltinSignatures;
-    bool m_bThoroughScan;
-
-    pthread_mutex_t m_ProgressMutex;
-    size_t m_NumSymbolsToCheck;
-    size_t m_NumSymbolsChecked;
 
     CSignatureFile m_BuiltinSigs;
 
@@ -94,11 +94,11 @@ private:
 
     void TallyNumSymbolsToCheck();
     void CountSymbolsRecursive(const char *path);
-    size_t CountSymbolsInFile(const char *path);
+    void CountSymbolsInFile(const char *path);
     size_t CountGlobalSymbolsInElf(CElfContext& elf);
 
     bool AddResult(search_result_t result);
-    void AddSymbolResults(CElfContext* elf, uint32_t baseAddress, int maxTextOffset = 0);
+    void AddSymbolResults(CElfContext* elf, uint32_t baseAddress, uint32_t maxTextOffset = 0);
     void AddRelocationResults(CElfContext* elf, const char* block, const char* altNamePrefix, int maxTextOffset = 0);
     static bool ResultCmp(search_result_t a, search_result_t b);
     void SortResults();

@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-static -I./include -I./build -O3 -s
+CFLAGS=-static -I./include -I./build -O3 -s -Wall -Wno-unused-function -Wno-strict-aliasing
 
 LD=g++
 LDFLAGS=-s -Wl,--gc-sections,-lm

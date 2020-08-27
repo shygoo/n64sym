@@ -45,7 +45,7 @@ size_t PathGetFileName(const char *path, char *dstName, size_t maxLength)
 
     const char *end = strchr(&path[i + 1], '.');
 
-    if(!end || (end - start) + 1 >= maxLength)
+    if(!end || (size_t)((end - start) + 1) >= maxLength)
     {
         strncpy(dstName, start, maxLength);
         return maxLength;

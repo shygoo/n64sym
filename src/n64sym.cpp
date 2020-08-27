@@ -18,13 +18,21 @@
 #include "signaturefile.h"
 #include "pathutil.h"
 
+#ifdef WIN32
+#include <windirent.h>
+#else
+#include <dirent.h>
+#endif
+
 CN64Sym::CN64Sym() :
     m_Binary(NULL),
     m_BinarySize(0),
+    m_HeaderSize(0x80000000),
     m_bVerbose(false),
     m_bUseBuiltinSignatures(false),
-    m_HeaderSize(0x80000000),
-    m_bThoroughScan(false)
+    m_bThoroughScan(false),
+    m_NumSymbolsToCheck(0),
+    m_NumSymbolsChecked(0)
 {
     char *builtinSigFileContents = new char[gBuiltinSignatureFile.uncSize];
 
@@ -152,7 +160,7 @@ bool CN64Sym::Run()
             m_LikelyFunctionOffsets.insert(i);
         }
 
-        // todo JALs
+        // todo JALs?
     }
 
     TallyNumSymbolsToCheck();
@@ -169,13 +177,12 @@ bool CN64Sym::Run()
 
     SortResults();
 
-    Log("\n");
     return true;
 }
 
 void CN64Sym::DumpResults()
 {
-    for(int i = 0; i < m_Results.size(); i++)
+    for(size_t i = 0; i < m_Results.size(); i++)
     {
         search_result_t result = m_Results.at(i);
         printf("%08X,code,%s\n", result.address, result.name);
@@ -230,7 +237,6 @@ void CN64Sym::ScanRecursive(const char* path)
 
 void CN64Sym::ProcessFile(const char* path)
 {
-    //Log("%s\n", path);
     if (PathIsStaticLibrary(path))
     {
         ProcessLibrary(path);
@@ -319,7 +325,7 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx)
     const char* textBuf = textSec->Data(&elf);
     uint32_t textSize = textSec->Size();
 
-    int endAddress = m_BinarySize - textSize;
+    uint32_t endAddress = m_BinarySize - textSize;
 
     bool bHaveFullMatch;
     uint32_t matchedAddress;
@@ -352,7 +358,6 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx)
 
     if(bHaveFullMatch)
     {
-        //printf("fullmatch %s\n", objProcessingCtx->blockIdentifier);
         Log("complete match\n");
         AddSymbolResults(&elf, matchedAddress);
         AddRelocationResults(&elf, matchedBlock, "__"); // fix me altNamePrefix
@@ -405,6 +410,8 @@ void* CN64Sym::ProcessObjectProc(void* _objProcessingCtx)
     _this->ProcessObject(objProcessingCtx);
 
     delete objProcessingCtx;
+
+    return NULL;
 }
 
 void CN64Sym::ProcessSignatureFile(const char* path)
@@ -428,7 +435,7 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile)
         char symbolName[128];
         sigFile.GetSymbolName(nSymbol, symbolName, sizeof(symbolName));
 
-        int progressLineLength = printf("(%d/%d) %s", nSymbol, numSymbols, symbolName);
+        int progressLineLength = printf("(%llu/%llu) %s", nSymbol, numSymbols, symbolName);
 
         for(auto offset : m_LikelyFunctionOffsets)
         {
@@ -491,11 +498,9 @@ bool CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesM
     text_relocations = (CElfRelocation*) rel_text_sec->Data(elf);
 
     int cur_reltab_index = 0;
-    uint32_t cur_relocation_offset = 0;
     
-    for(int i = 0; i < text_sec_size; i += sizeof(uint32_t))
+    for(uint32_t i = 0; i < text_sec_size; i += sizeof(uint32_t))
     {
-        //bool have_relocation = false;
         // see if this opcode has a relocation
 
         CElfRelocation* curRelocation = &text_relocations[cur_reltab_index];
@@ -505,7 +510,7 @@ bool CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesM
             // if for some reason the relocation is on a NOP, don't count it
             if(data[i] == 0x00000000)
             {
-                *nBytesMatched == i;
+                *nBytesMatched = i;
                 return false;
             }
 
@@ -576,10 +581,8 @@ void CN64Sym::TallyNumSymbolsToCheck()
     }
 }
 
-size_t CN64Sym::CountSymbolsInFile(const char *path)
+void CN64Sym::CountSymbolsInFile(const char *path)
 {
-    //printf("counting symbols in %s\n", path);
-
     if(PathIsSignatureFile(path))
     {
         CSignatureFile sigFile;
@@ -590,8 +593,6 @@ size_t CN64Sym::CountSymbolsInFile(const char *path)
     }
     else if(PathIsStaticLibrary(path))
     {
-        //printf("path is static library\n");
-
         CArReader ar;
         if(ar.Load(path))
         {
@@ -666,7 +667,6 @@ void CN64Sym::CountSymbolsRecursive(const char* path)
             {
                 if (IsFileWithSymbols(next_path))
                 {
-                    //printf("next path %s\n", next_path);
                     CountSymbolsInFile(next_path);
                 }
                 break;
@@ -680,25 +680,25 @@ void CN64Sym::CountSymbolsRecursive(const char* path)
 
 bool CN64Sym::AddResult(search_result_t result)
 {
-    // have link address from jump target
-    if(result.address != 0)
+    // todo use map
+    if(result.address == 0)
     {
-        for(int i = 0; i < m_Results.size(); i++)
-        {
-            search_result_t test_result = m_Results.at(i);
-            if(test_result.address == result.address)
-            {
-                return false; // already have
-            }
-        }
-        m_Results.push_back(result);
-        //Log("    %08X %s\n", result.address, result.name);
-        return true;
+        return false;
     }
+
+    for(auto& otherResult : m_Results)
+    {
+        if(otherResult.address == result.address)
+        {
+            return false; // already have
+        }
+    }
+
     m_Results.push_back(result);
+    return true;
 }
 
-void CN64Sym::AddSymbolResults(CElfContext* elf, uint32_t baseAddress, int maxTextOffset)
+void CN64Sym::AddSymbolResults(CElfContext* elf, uint32_t baseAddress, uint32_t maxTextOffset)
 {
     int nSymbols = elf->NumSymbols();
 
@@ -717,7 +717,6 @@ void CN64Sym::AddSymbolResults(CElfContext* elf, uint32_t baseAddress, int maxTe
             }
 
             search_result_t result;
-            //result.file_address = 0;
             result.address = m_HeaderSize + (baseAddress + symbol->Value());
             result.size = symbol->Size();
             strcpy(result.name, symbol->Name(elf));
