@@ -59,7 +59,7 @@ int main(int argc, const char *argv[])
         free(src_buf);
         free(cmp_buf);
         
-        printf("error: compression failed\n", argv[2]);
+        printf("error: compression failed\n");
 
         return EXIT_FAILURE;
     }
