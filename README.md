@@ -8,28 +8,22 @@
 
 ## Options
 
-    -b                                     use the built-in signature file
-    -l <signature/library/object path(s)>  scan for symbols from signature/object/library file(s)
-    -f <output format>                     set the output format (pj64, nemu, n64split)
-    -t                                     scan thoroughly
+    -s                        scan for symbols from the built-in signature file
+    -l <sig/lib/obj path(s)>  scan for symbols from signature/object/library file(s)
+    -f <output format>        set the output format (pj64, nemu, armips, n64split, default)
+    -h <headersize>           set the header size  (default: 0x80000000)
+    -t                        scan thoroughly
+    -v                        enable verbose logging
 
 ### `<input path>`
 
 Sets the path of the file to scan. The input file may either be a RAM dump or ROM image.
 
-If the file extension is `.z64`, `.n64`, or `.v64`, the tool will assume the file is a ROM image and attempt to identify the position of the main code segment and adjust the symbol addresses accordingly.
+If the file extension is `.z64`, `.n64`, or `.v64`, the tool will assume the file is a ROM image and attempt to identify the position of the main code segment and adjust the symbol addresses accordingly. Note that scanning a ROM image may yield inaccurate results; using a RAM dump for the input file is recommended.
 
 ### `-s`
 
-Scans against the built-in signature file. The built-in signature file currently includes symbol descriptions for the following N64 OS libraries:
-
-|               | 2.0c | SN64 | 2.0h | 2.0i | 2.0j | 2.0k | 2.0l |
-|---------------|:----:|:----:|:----:|:----:|:----:|:----:|:----:|
-| `libultra`    | ✅  | ✅   | ❌  | ✅   | ✅  |   ❌ |  ✅  |
-| `libgultra`   | ❌  | ❌   | ✅  | ✅   | ✅  |   ✅ |  ✅  |
-| `libn_audio`  | ❌  | ❌   | ❌  | ❌   | ✅  |   ❌ |  ✅  |
-| `libgn_audio` | ❌  | ❌   | ❌  | ❌   | ✅  |   ✅ |  ✅  |
-| `libleo`      | ❌  | ❌   | ✅  | ✅   | ✅  |   ✅ |  ✅  |
+Scans against the built-in signature file. See [Included Libraries](included-libs.md) for a list of currently included libraries.
 
 ### `-l <library/object path(s)>`
 
@@ -37,11 +31,27 @@ Scans against ELF libraries and objects. If a directory path is provided, `n64sy
 
 ### `-f <format>`
 
-Sets the output format. Valid formats include `pj64`, `nemu`, and `n64split`. If this option is not used, `n64sym` will use `pj64`.
+Sets the output format. Valid formats include `pj64`, `nemu`, `armips`, `n64split`, and `default`.
+
+| Format     | Description                             |
+|------------|-----------------------------------------|
+| `pj64`     | Project64 debugger symbols (*.sym)      |
+| `nemu`     | Nemu64 bookmarks (*.nbm)                |
+| `armips`   | armips labels (*.asm)                   |
+| `n64split` | n64split config labels (*.yaml)         |
+| `default`  | Space-separated address and symbol name |
+
+### `-h <headersize>`
+
+Overrides the header size (the value to add to symbol addresses). By default this value is either `0x80000000` or a value determined by the entry point field and bootcode if the input file is a ROM image.
 
 ### `-t`
 
-Enables thorough scanning.
+Scan thoroughly. When this option is enabled, the scanner will check every byte of the input file instead of only checking spots that look like functions.
+
+### `-v`
+
+Enable verbose logging.
 
 ## Example
 
@@ -57,44 +67,4 @@ Enables thorough scanning.
 
     n64sig <output path> <library/object path(s)>
 
----
-
-# Signature file format
-
-An `n64sym`-compatible signature file contains a list of symbol and relocation descriptions in plain text. Signature files may be generated using the `n64sig` utility included in this repository.
-
-## File extension
-
-Signature files must be named with an extension of `.sig`.
-
-## Symbol definitions
-
-A symbol definition describes a symbol by its size and a pair CRCs representing the data.
-
-### Syntax:
-
-    name size crcA crcB
-
-| Field  | Description                                                      |
-|--------|------------------------------------------------------------------|
-| `name` | Name of the symbol                                               |
-| `size` | Byte length of the symbol's data                                 |
-| `crcA` | CRC32 of the first 8 bytes or all bytes if `size` is less than 8 |
-| `crcB` | CRC32 of all bytes                                               |
-
-## Relocation definitions
-
-A relocation definition describes a relocation within the last symbol's data.
-
-### Syntax:
-
-    reltype relname offsets
-
-| Field     | Description                     |
-|-----------| --------------------------------|
-| `reltype` | Type of relocation              |
-| `relname` | Name of the referenced symbol   |
-| `offsets` | Space-separated list of offsets |
-
-`type` may be one of the following: `.hi16`, `.lo16`, `.targ26`.
 
