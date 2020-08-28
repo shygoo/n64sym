@@ -12,8 +12,6 @@
 
 #include "n64sym.h"
 
-bool ProcessLibsOption(CN64Sym& n64sym, int argc, const char* argv[], int& argi);
-
 int main(int argc, const char* argv[])
 {
     CN64Sym n64sym;
@@ -26,8 +24,9 @@ int main(int argc, const char* argv[])
             "  Usage: n64sym <binary path> [options]\n\n"
             "  Options:\n"
             "    -s                         scan for symbols from built-in signature file\n"
-            "    -l <sig/lib/obj path(s)>   scan for symbols from signature/library/object file(s)\n"
+            "    -l <sig/lib/obj path>      scan for symbols from signature/library/object file(s)\n"
             "    -f <format>                set the output format (pj64, nemu, armips, n64split, default)\n"
+            "    -o <output path>           set the output path\n"
             "    -h <headersize>            set the headersize (default: 0x80000000)"
             "    -t                         scan thoroughly\n"
             "    -v                         enable verbose logging\n"
@@ -55,11 +54,11 @@ int main(int argc, const char* argv[])
         switch(argv[argi][1])
         {
         case 'l':
-            if(!ProcessLibsOption(n64sym, argc, argv, argi))
+            if(argi+1 >= argc)
             {
-                printf("Error: No library/object path(s)");
-                return EXIT_FAILURE;
+                printf("Error: No path path specified for '-l'\n");
             }
+            n64sym.AddLibPath(argv[argi+1]);
             break;
         case 's':
             n64sym.UseBuiltinSignatures(true);
@@ -92,34 +91,29 @@ int main(int argc, const char* argv[])
             n64sym.SetHeaderSize(strtoul(argv[argi+1], NULL, 0));
             argi++;
             break;
+        case 'o':
+            if(argi+1 >= argc)
+            {
+                printf("Error: no path specified for '-o'\n");
+                return EXIT_FAILURE;
+            }
+            if(!n64sym.SetOutputPath(argv[argi+1]))
+            {
+                printf("Error: could not open '%s'\n", argv[argi+1]);
+                return EXIT_FAILURE;
+            }
+            argi++;
+            break;
         default:
             printf("Error: Invalid switch '%s'\n", argv[argi]);
             return EXIT_FAILURE;
         }
     }
 
-    n64sym.Run();
-    n64sym.DumpResults();
+    if(!n64sym.Run())
+    {
+        return EXIT_FAILURE;
+    }
 
     return EXIT_SUCCESS;
-}
-
-bool ProcessLibsOption(CN64Sym& n64sym, int argc, const char* argv[], int& argi)
-{
-    int npaths = 0;
-    
-    for(; argi + 1 < argc; argi++)
-    {
-        const char* lib_path = argv[argi + 1];
-    
-        if(lib_path[0] == '-')
-        {
-            break;
-        }
-        
-        n64sym.AddLibPath(lib_path);
-        npaths++;
-    }
-    
-    return (npaths != 0);
 }

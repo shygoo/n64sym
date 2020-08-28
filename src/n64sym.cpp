@@ -8,6 +8,8 @@
 */
 
 #include <fstream>
+#include <iostream>
+#include <cstdio>
 #include <set>
 
 #include <miniz/miniz.h>
@@ -41,6 +43,8 @@ CN64Sym::CN64Sym() :
     m_bUseBuiltinSignatures(false),
     m_bThoroughScan(false),
     m_bOverrideHeaderSize(false),
+    m_bHaveOutputFile(false),
+    m_Output(&std::cout),
     m_OutputFormat(N64SYM_FMT_DEFAULT),
     m_NumSymbolsToCheck(0),
     m_NumSymbolsChecked(0)
@@ -175,6 +179,20 @@ bool CN64Sym::SetOutputFormat(const char *fmtName)
     return false;
 }
 
+bool CN64Sym::SetOutputPath(const char *path)
+{
+    m_OutputFile.open(path, std::ofstream::binary);
+
+    if(!m_OutputFile.is_open())
+    {
+        m_Output = &std::cout;
+        return false;
+    }
+
+    m_Output = &m_OutputFile;
+    return true;
+}
+
 void CN64Sym::SetHeaderSize(uint32_t headerSize)
 {
     m_bOverrideHeaderSize = true;
@@ -225,6 +243,7 @@ bool CN64Sym::Run()
     }
 
     SortResults();
+    DumpResults();
 
     return true;
 }
@@ -236,30 +255,37 @@ void CN64Sym::DumpResults()
     case N64SYM_FMT_PJ64:
         for(auto& result : m_Results)
         {
-            printf("%08X,code,%s\n", result.address, result.name);
+            Output("%08X,code,%s\n", result.address, result.name);
         }
         break;
     case N64SYM_FMT_NEMU:
-
+        Output("Root\n");
+        Output("\tCPU\n");
+        for(auto& result : m_Results)
+        {
+            Output("\t\tCPU 0x%08X: %s\n", result.address, result.name);
+        }
+        Output("\tMemory\n");
+        Output("\tRSP\n");
         break;
     case N64SYM_FMT_ARMIPS:
         for(auto& result : m_Results)
         {
-            printf(".definelabel %s, 0x%08X\n", result.name, result.address);
+            Output(".definelabel %s, 0x%08X\n", result.name, result.address);
         }
         break;
     case N64SYM_FMT_N64SPLIT:
-        printf("labels:\n");
+        Output("labels:\n");
         for(auto &result : m_Results)
         {
-            printf("   - [0x%08X, \"%s\"]\n", result.address, result.name);
+            Output("   - [0x%08X, \"%s\"]\n", result.address, result.name);
         }
         break;
     case N64SYM_FMT_DEFAULT:
     default:
         for(auto& result : m_Results)
         {
-            printf("%08X %s\n", result.address, result.name);
+            Output("%08X %s\n", result.address, result.name);
         }
         break;
     }
@@ -510,7 +536,6 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile)
     size_t numSymbols = sigFile.GetNumSymbols();
 
     const char *statusDescription = "(built-in signatures)";
-
     int percentDone = 0;
     int statusLineLen = printf("[  0%%] %s", statusDescription);
 
@@ -522,7 +547,6 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile)
         sigFile.GetSymbolName(nSymbol, symbolName, sizeof(symbolName));
 
         int percentNow = (int)(((float)nSymbol / numSymbols) * 100);
-
         if(percentNow > percentDone)
         {
             ClearLine(statusLineLen);
@@ -920,5 +944,21 @@ void CN64Sym::Log(const char* format, ...)
     va_list args;
     va_start(args, format);
     vprintf(format, args);
+    va_end(args);
+}
+
+void CN64Sym::Output(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+
+    size_t len = vsnprintf(NULL, 0, format, args);
+    char *str = new char[len + 1];
+
+    vsprintf(str, format, args);
+
+    *m_Output << str;
+    delete[] str;
+    
     va_end(args);
 }

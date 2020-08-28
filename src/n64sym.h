@@ -15,6 +15,7 @@
 #include <vector>
 #include <algorithm>
 #include <set>
+#include <fstream>
 
 #include "arutil.h"
 #include "elfutil.h"
@@ -43,6 +44,7 @@ public:
     void SetThoroughScan(bool bThorough);
     bool SetOutputFormat(const char *fmtName);
     void SetHeaderSize(uint32_t headerSize);
+    bool SetOutputPath(const char *path);
     bool Run();
     void DumpResults();
     
@@ -87,6 +89,10 @@ private:
     bool     m_bUseBuiltinSignatures;
     bool     m_bThoroughScan;
     bool     m_bOverrideHeaderSize;
+    bool     m_bHaveOutputFile;
+    
+    std::ostream *m_Output;
+    std::ofstream m_OutputFile;
 
     n64sym_output_fmt_t m_OutputFormat;
 
@@ -127,6 +133,7 @@ private:
 
     void ProgressInc(size_t numSymbols);
     void Log(const char* format, ...);
+    void Output(const char *format, ...);
     static void ClearLine(int nChars);
 };
 
