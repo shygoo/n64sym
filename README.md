@@ -6,7 +6,7 @@
 
     n64sym <input path> [options] 
 
-### `<input path>`
+#### `<input path>`
 
 Sets the path of the file to scan. The input file may either be a RAM dump or ROM image.
 
@@ -56,7 +56,7 @@ Enables thorough scanning. When this option is enabled, the scanner will check e
 
 #### `-v`
 
-Enable verbose logging.
+Enables verbose logging.
 
 ## Examples
 ```

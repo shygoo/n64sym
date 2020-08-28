@@ -43,7 +43,6 @@ CN64Sym::CN64Sym() :
     m_bUseBuiltinSignatures(false),
     m_bThoroughScan(false),
     m_bOverrideHeaderSize(false),
-    m_bHaveOutputFile(false),
     m_Output(&std::cout),
     m_OutputFormat(N64SYM_FMT_DEFAULT),
     m_NumSymbolsToCheck(0),
@@ -86,9 +85,9 @@ bool CN64Sym::LoadBinary(const char *binPath)
 
     file.seekg(0, file.end);
     m_BinarySize = file.tellg();
+    m_Binary = new uint8_t[m_BinarySize];
 
     file.seekg(0, file.beg);
-    m_Binary = new uint8_t[m_BinarySize];
     file.read((char *)m_Binary, m_BinarySize);
 
     if(PathIsN64Rom(binPath) && !m_bOverrideHeaderSize)
@@ -164,9 +163,7 @@ void CN64Sym::SetThoroughScan(bool bThoroughScan)
 
 bool CN64Sym::SetOutputFormat(const char *fmtName)
 {
-    size_t numFormats = sizeof(FormatNames) / sizeof(FormatNames[0]);
-
-    for(size_t i = 0; i < numFormats; i++)
+    for(size_t i = 0; i < sizeof(FormatNames) / sizeof(FormatNames[0]); i++)
     {
         if(strcmp(FormatNames[i].name, fmtName) == 0)
         {
@@ -377,10 +374,10 @@ void CN64Sym::ProcessLibrary(const char* path)
         objProcessingCtx->blockData = ar.GetBlockData();
         objProcessingCtx->blockSize = ar.GetBlockSize();
 
-        threadPool.AddWorker(ProcessObjectProc, (void*)objProcessingCtx);
+        m_ThreadPool.AddWorker(ProcessObjectProc, (void*)objProcessingCtx);
     }
 
-    threadPool.WaitForWorkers();
+    m_ThreadPool.WaitForWorkers();
 }
 
 void CN64Sym::ProcessObject(const char* path)
@@ -388,20 +385,20 @@ void CN64Sym::ProcessObject(const char* path)
     uint8_t* buffer;
     size_t size;
 
-    FILE* fp = fopen(path, "rb");
+    std::ifstream file;
+    file.open(path, std::ifstream::binary);
 
-    if(fp == NULL)
+    if(!file.is_open())
     {
         return;
     }
 
-    fseek(fp, 0, SEEK_END);
-    size = ftell(fp);
-    rewind(fp);
+    file.seekg(0, file.end);
+    size = file.tellg();
+    buffer = new uint8_t[size];
 
-    buffer = (uint8_t *)malloc(size);
-    fread(buffer, 1, size, fp);
-    fclose(fp);
+    file.seekg(0, file.beg);
+    file.read((char*)buffer, size);
 
     Log("%s\n", path);
 
@@ -414,7 +411,7 @@ void CN64Sym::ProcessObject(const char* path)
 
     ProcessObject(&objProcessingCtx);
 
-    free(buffer);
+    delete[] buffer;
 }
 
 void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx)
@@ -459,7 +456,7 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx)
         }
     }
 
-    threadPool.LockDefaultMutex();
+    m_ThreadPool.LockDefaultMutex();
 
     Log("%s:%s\n", objProcessingCtx->libraryPath, objProcessingCtx->blockIdentifier);
 
@@ -477,7 +474,7 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx)
     }
     else
     {
-        threadPool.UnlockDefaultMutex();
+        m_ThreadPool.UnlockDefaultMutex();
         return;
     }
 
@@ -506,7 +503,7 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx)
     }
 
     Log("\n");
-    threadPool.UnlockDefaultMutex();
+    m_ThreadPool.UnlockDefaultMutex();
 }
 
 void* CN64Sym::ProcessObjectProc(void* _objProcessingCtx)

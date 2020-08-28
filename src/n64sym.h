@@ -79,7 +79,7 @@ private:
         int nBytesMatched;
     } partial_match_t;
 
-    CThreadPool threadPool;
+    CThreadPool m_ThreadPool;
 
     uint8_t* m_Binary;
     size_t   m_BinarySize;
@@ -89,7 +89,6 @@ private:
     bool     m_bUseBuiltinSignatures;
     bool     m_bThoroughScan;
     bool     m_bOverrideHeaderSize;
-    bool     m_bHaveOutputFile;
     
     std::ostream *m_Output;
     std::ofstream m_OutputFile;
