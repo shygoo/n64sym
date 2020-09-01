@@ -70,27 +70,27 @@
 #define R_MIPS_CALL16  21
 
 // special section numbers
-#define SHN_UNDEF 0
-#define SHN_LORESERVE 0xff00
-#define SHN_LOPROC 0xff00
-#define SHN_HIPROC 0xff1f
-#define SHN_ABS 0xfff1
-#define SHN_COMMON 0xfff2
-#define SHN_HIRESERVE 0xffff
+#define SHN_UNDEF     0x0000
+#define SHN_LORESERVE 0xFF00
+#define SHN_LOPROC    0xFF00
+#define SHN_HIPROC    0xFF1F
+#define SHN_ABS       0xFFF1
+#define SHN_COMMON    0xFFF2
+#define SHN_HIRESERVE 0xFFFF
 
 // symbol bindings
-#define STB_LOCAL 0
-#define STB_GLOBAL 1
-#define STB_WEAK 2
+#define STB_LOCAL   0
+#define STB_GLOBAL  1
+#define STB_WEAK    2
 #define STB_LOPROC 13
 #define STB_HIPROC 15
 
 // symbol types
-#define STT_NOTYPE 0
-#define STT_OBJECT 1
-#define STT_FUNC 2
+#define STT_NOTYPE  0
+#define STT_OBJECT  1
+#define STT_FUNC    2
 #define STT_SECTION 3
-#define STT_FILE 4
+#define STT_FILE    4
 #define STT_LOPROC 13
 #define STT_HIPROC 15
 

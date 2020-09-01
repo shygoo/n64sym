@@ -22,6 +22,7 @@ class CN64Sig
     typedef struct {
         uint8_t relocType;
         char relocSymbolName[128];
+        //uint32_t param;
     } reloc_entry_t;
 
     struct reloc_entry_cmp_t

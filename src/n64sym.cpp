@@ -11,6 +11,7 @@
 #include <iostream>
 #include <cstdio>
 #include <set>
+#include <map>
 
 #include <miniz/miniz.h>
 #include <miniz/miniz.c>
@@ -669,6 +670,9 @@ bool CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesM
 
 bool CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset)
 {
+    typedef struct { uint32_t address; bool haveHi16; bool haveLo16; } test_t;
+    std::map<std::string, test_t> relocMap;
+
     if(sigFile.TestSymbol(nSymbol, &m_Binary[offset]))
     {
         search_result_t result;
@@ -676,6 +680,56 @@ bool CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint3
         result.size = sigFile.GetSymbolSize(nSymbol);
         sigFile.GetSymbolName(nSymbol, result.name, sizeof(result.name));
         AddResult(result);
+
+        // add results from relocations
+        for(size_t nReloc = 0; nReloc < sigFile.GetNumRelocs(nSymbol); nReloc++)
+        {
+            char relocName[128];
+            sigFile.GetRelocName(nSymbol, nReloc, relocName, sizeof(relocName));
+            uint8_t relocType = sigFile.GetRelocType(nSymbol, nReloc);
+            uint32_t relocOffset = sigFile.GetRelocOffset(nSymbol, nReloc);
+
+            uint32_t opcode = bswap32(*(uint32_t*)&m_Binary[offset + relocOffset]);
+
+            switch(relocType)
+            {
+            case R_MIPS_HI16:
+                if(relocMap.count(relocName) == 0)
+                {
+                    relocMap[relocName].haveHi16 = true;
+                    relocMap[relocName].haveLo16 = false;
+                }
+                relocMap[relocName].address = (opcode & 0x0000FFFF) << 16;
+                break;
+            case R_MIPS_LO16:
+                if(relocMap.count(relocName) != 0)
+                {
+                    relocMap[relocName].address += (int16_t)(opcode & 0x0000FFFF);
+                }
+                else
+                {
+                    printf("missing hi16?");
+                    exit(0);
+                }
+                break;
+            case R_MIPS_26:
+                relocMap[relocName].address = (m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
+                break;
+            }
+
+            //printf("%s %02X %04X\n", relocName, relocType, relocOffset);
+        }
+
+        for(auto& i : relocMap)
+        {
+            search_result_t relocResult;
+            relocResult.address = i.second.address;
+            relocResult.size = 0;
+            strncpy(relocResult.name, i.first.c_str(), sizeof(relocResult.name) - 1);
+            AddResult(relocResult);
+        }
+        //printf("-------\n");
+
         return true;
     }
     return false;

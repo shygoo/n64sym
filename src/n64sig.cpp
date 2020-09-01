@@ -13,6 +13,9 @@
 #include <dirent.h>
 #endif
 
+#include <algorithm>
+#include <cstring>
+
 #include "n64sig.h"
 #include "arutil.h"
 #include "pathutil.h"
@@ -37,6 +40,37 @@ void CN64Sig::AddLibPath(const char *path)
     m_LibPaths.push_back(path);
 }
 
+int stricmp(const char* a, const char *b)
+{
+    size_t alen = strlen(a);
+    size_t blen = strlen(b);
+
+    size_t len = min(alen, blen);
+
+    for(size_t i = 0; i < len; i++)
+    {
+        int ac = tolower(a[i]);
+        int bc = tolower(b[i]);
+
+        if(ac < bc) return -1;
+        if(ac > bc) return  1;
+    }
+
+    if(alen < blen) return -1;
+    if(alen > blen) return  1;
+
+    return 0;
+}
+
+const char *strPastUnderscores(const char *s)
+{
+    while(*s == '_')
+    {
+        s++;
+    }
+    return s;
+}
+
 bool CN64Sig::Run()
 {
     m_NumProcessedSymbols = 0;
@@ -54,16 +88,33 @@ bool CN64Sig::Run()
         printf("# %zu processed\n", m_NumProcessedSymbols);
     }
 
+    // copy symbol map to into a vector and sort it by symbol name
+
+    std::vector<symbol_entry_t> symbols;
+
     for(auto& i : m_SymbolMap)
     {
-        symbol_entry_t& symbolEntry = i.second;
+        symbols.push_back(i.second);
+    }
 
-        //printf("%s\n", symbolEntry);
+    std::sort(symbols.begin(), symbols.end(), [](symbol_entry_t& a, symbol_entry_t& b){
+        return stricmp(strPastUnderscores(a.name), strPastUnderscores(b.name)) < 0;
+    });
+
+    for(auto& symbolEntry : symbols)
+    {
+        //symbol_entry_t& symbolEntry = i.second;
+
         printf("%s 0x%04X 0x%08X 0x%08X\n",
             symbolEntry.name,
             symbolEntry.size,
             symbolEntry.crc_a,
             symbolEntry.crc_b);
+
+        if(symbolEntry.relocs == NULL)
+        {
+            continue;
+        }
 
         for(auto& j : *symbolEntry.relocs)
         {
@@ -82,16 +133,9 @@ bool CN64Sig::Run()
             printf("\n");
         }
 
-        printf("\n");
-    }
+        delete symbolEntry.relocs;
 
-    for(auto& i : m_SymbolMap)
-    {
-        symbol_entry_t& symbolEntry = i.second;
-        if(symbolEntry.relocs != NULL)
-        {
-            delete symbolEntry.relocs;
-        }
+        printf("\n");
     }
 
     return true;
@@ -127,6 +171,8 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t& rel
     uint32_t symbolOffset = symbol->Value();
     uint32_t symbolSize = symbol->Size();
 
+    uint32_t lastHi16Addend = 0;
+
     for(int nRel = 0; nRel < numTextRelocations; nRel++)
     {
         CElfRelocation *relocation = elf.TextRelocation(nRel);
@@ -143,37 +189,74 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t& rel
         CElfSymbol *relSymbol = relocation->Symbol(&elf);
         strncpy(relSymbolName, relSymbol->Name(&elf), sizeof(relSymbolName) - 1);
         uint8_t relType = relocation->Type();
-        const char *relTypeName = GetRelTypeName(relocation->Type());
+        //const char *relTypeName = GetRelTypeName(relocation->Type());
 
         const uint8_t *textData = (const uint8_t *)elf.Section(".text")->Data(&elf);
-        //const uint8_t *test = &textData[relocation->Offset()];
         uint8_t *opcode = (uint8_t *) &textData[relocation->Offset()];
+        reloc_entry_t relocEntry;
+        //relocEntry.param = 0;
 
-        if(relType == 5 || relType == 6)
+        if(relSymbol->Binding() == STB_LOCAL) // anonymous symbol
+        {
+            uint32_t addend = 0;
+            uint32_t opcodeBE = bswap32(*(uint32_t*)opcode);
+
+            if(relType == R_MIPS_HI16)
+            {
+                addend = (opcodeBE & 0xFFFF) << 16;
+                CElfRelocation *relocation2 = elf.TextRelocation(nRel + 1); // todo guard
+
+                // next relocation must be LO16
+                if(relocation2->Type() != R_MIPS_LO16)
+                {
+                    exit(EXIT_FAILURE);
+                }
+
+                uint8_t *opcode2 = (uint8_t*) &textData[relocation2->Offset()];
+                uint32_t opcode2BE = bswap32(*(uint32_t*)opcode2);
+
+                addend += (int16_t)(opcode2BE & 0xFFFF);
+
+                lastHi16Addend = addend;
+
+                //printf("%08X\n", addend);
+            }
+            else if(relType == R_MIPS_LO16)
+            {
+                addend = lastHi16Addend;
+            }
+            else if(relType == R_MIPS_26)
+            {
+                addend = (opcodeBE & 0x03FFFFFF) << 2;
+            }
+
+            const char *relSymbolSectionName = elf.Section(relSymbol->SectionIndex())->Name(&elf);
+            snprintf(relSymbolName, sizeof(relSymbolName), "%s_%s_%04X", objectName, &relSymbolSectionName[1], addend);
+
+            //printf("# %08X\n", relSymbol->Value());
+        }
+
+        // set addend to 0 before crc
+        if(relType == R_MIPS_HI16 || relType == R_MIPS_LO16)
         {
             opcode[2] = 0x00;
             opcode[3] = 0x00;
         }
-        if(relType == 4)
+        else if(relType == R_MIPS_26)
         {
             opcode[0] &= 0xFC;
             opcode[1] = 0x00;
             opcode[2] = 0x00;
             opcode[3] = 0x00;
         }
-
-        if(relSymbolName[0] == '.')
+        else
         {
-            snprintf(relSymbolName, sizeof(relSymbolName), "%s_%s", objectName, relSymbol->Name(&elf));
-            FormatAnonymousSymbol(relSymbolName);
-        }
-
-        if(relTypeName == NULL)
-        {
+            printf("# warning unhandled relocation type\n");
             continue;
+            //printf("unk rel %d\n", relType);
+            //exit(0);
         }
 
-        reloc_entry_t relocEntry;
         relocEntry.relocType = relType;
         strncpy(relocEntry.relocSymbolName, relSymbolName, sizeof(relocEntry.relocSymbolName));
 
@@ -193,14 +276,17 @@ void CN64Sig::ProcessLibrary(const char *path)
 
     while(arReader.SeekNextBlock())
     {
-        const char *objectName = arReader.GetBlockIdentifier();
+        const char *blockId = arReader.GetBlockIdentifier();
         uint8_t    *objectData = arReader.GetBlockData();
         size_t      objectSize = arReader.GetBlockSize();
 
-        if(!PathIsObjectFile(objectName))
+        if(!PathIsObjectFile(blockId))
         {
             continue;
         }
+
+        char objectName[256];
+        PathGetFileName(blockId, objectName, sizeof(objectName));
 
         elf.LoadFromMemory(objectData, objectSize);
 
@@ -210,9 +296,10 @@ void CN64Sig::ProcessLibrary(const char *path)
 
 void CN64Sig::ProcessObject(CElfContext& elf, const char *objectName)
 {
+    //printf("# object: %s\n", objectName);
+
     CElfSection *textSection;
     const uint8_t *textData;
-    //size_t textSize;
     int indexOfText;
 
     // todo rename IndexOfSection
@@ -221,11 +308,8 @@ void CN64Sig::ProcessObject(CElfContext& elf, const char *objectName)
         return;
     }
 
-    //printf("# %s\n\n", objectName);
-
     textSection = elf.Section(indexOfText);
     textData = (const uint8_t*)textSection->Data(&elf);
-    //textSize = textSection->Size();
 
     int numSymbols = elf.NumSymbols();
 
@@ -239,8 +323,6 @@ void CN64Sig::ProcessObject(CElfContext& elf, const char *objectName)
         uint32_t    symbolSize = symbol->Size();
         uint32_t    symbolOffset = symbol->Value();
 
-        //uint32_t crc_a, crc_b;
-
         if(symbolSectionIndex != indexOfText ||
            symbolType != STT_FUNC ||
            symbolSize == 0)
@@ -252,8 +334,6 @@ void CN64Sig::ProcessObject(CElfContext& elf, const char *objectName)
         strncpy(symbolEntry.name, symbolName, sizeof(symbolEntry.name) - 1);
         symbolEntry.relocs = new reloc_map_t;
 
-        //reloc_map_t relocs;
-        // note: writes to const buffer
         StripAndGetRelocsInSymbol(objectName, *symbolEntry.relocs, symbol, elf);
 
         symbolEntry.size = symbolSize;
@@ -285,7 +365,7 @@ void CN64Sig::ProcessObject(CElfContext& elf, const char *objectName)
 
 void CN64Sig::ProcessObject(const char *path)
 {
-    char objectName[128];
+    char objectName[256];
     PathGetFileName(path, objectName, sizeof(objectName));
 
     CElfContext elf;

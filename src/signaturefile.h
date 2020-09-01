@@ -59,6 +59,12 @@ public:
     uint32_t GetSymbolSize(size_t nSymbol);
     bool GetSymbolName(size_t nSymbol, char *str, size_t nMaxChars);
     bool TestSymbol(size_t nSymbol, const uint8_t *buffer);
+
+    // relocs
+    size_t GetNumRelocs(size_t nSymbol);
+    bool GetRelocName(size_t nSymbol, size_t nReloc, char *str, size_t nMaxChars);
+    uint8_t GetRelocType(size_t nSymbol, size_t nReloc);
+    uint32_t GetRelocOffset(size_t nSymbol, size_t nReloc);
 };
 
 #endif // SIGNATUREFILE_H

@@ -69,6 +69,60 @@ bool CSignatureFile::GetSymbolName(size_t nSymbol, char *str, size_t nMaxChars)
     return true;
 }
 
+size_t CSignatureFile::GetNumRelocs(size_t nSymbol)
+{
+    if(nSymbol >= m_Symbols.size() ||
+       m_Symbols[nSymbol].relocs == NULL)
+    {
+        return 0;
+    }
+
+    return m_Symbols[nSymbol].relocs->size();
+}
+
+uint32_t CSignatureFile::GetRelocOffset(size_t nSymbol, size_t nReloc)
+{
+    if(nSymbol >= m_Symbols.size() ||
+       m_Symbols[nSymbol].relocs == NULL ||
+       nReloc >= m_Symbols[nSymbol].relocs->size())
+    {
+        return 0;
+    }
+
+    reloc_t reloc = m_Symbols[nSymbol].relocs->at(nReloc);
+
+    return reloc.offset;
+}
+
+uint8_t CSignatureFile::GetRelocType(size_t nSymbol, size_t nReloc)
+{
+    if(nSymbol >= m_Symbols.size() ||
+       m_Symbols[nSymbol].relocs == NULL ||
+       nReloc >= m_Symbols[nSymbol].relocs->size())
+    {
+        return -1;
+    }
+
+    reloc_t reloc = m_Symbols[nSymbol].relocs->at(nReloc);
+
+    return reloc.type;
+}
+
+bool CSignatureFile::GetRelocName(size_t nSymbol, size_t nReloc, char *str, size_t nMaxChars)
+{
+    if(nSymbol >= m_Symbols.size() ||
+       m_Symbols[nSymbol].relocs == NULL ||
+       nReloc >= m_Symbols[nSymbol].relocs->size())
+    {
+        return false;
+    }
+
+    reloc_t reloc = m_Symbols[nSymbol].relocs->at(nReloc);
+
+    strncpy(str, reloc.name, nMaxChars);
+    return true;
+}
+
 void CSignatureFile::ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType)
 {
     memcpy(dst, src, 4);
@@ -91,14 +145,14 @@ void CSignatureFile::ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relT
     }
 }
 
-void debug(const uint8_t *buf, size_t size)
-{
-    printf("\n");
-    for(size_t i = 0; i < size; i++)
-    {
-        printf("%02X ", buf[i]);
-    }
-}
+//void debug(const uint8_t *buf, size_t size)
+//{
+//    printf("\n");
+//    for(size_t i = 0; i < size; i++)
+//    {
+//        printf("%02X ", buf[i]);
+//    }
+//}
 
 bool CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer)
 {
