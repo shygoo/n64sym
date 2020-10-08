@@ -51,14 +51,21 @@ int main(int argc, const char* argv[])
             return EXIT_FAILURE;
         }
         
+        if(strlen(&argv[argi][1]) != 1)
+        {
+            printf("Error: Invalid switch '%s'\n", argv[argi]);
+            return EXIT_FAILURE;
+        }
+
         switch(argv[argi][1])
         {
         case 'l':
             if(argi+1 >= argc)
             {
-                printf("Error: No path path specified for '-l'\n");
+                printf("Error: No path specified for '-l'\n");
             }
             n64sym.AddLibPath(argv[argi+1]);
+            argi++;
             break;
         case 's':
             n64sym.UseBuiltinSignatures(true);
@@ -72,12 +79,12 @@ int main(int argc, const char* argv[])
         case 'f':
             if(argi+1 >= argc)
             {
-                printf("Error: no output format specified for '-f'\n");
+                printf("Error: No output format specified for '-f'\n");
                 return EXIT_FAILURE;
             }
             if(!n64sym.SetOutputFormat(argv[argi+1]))
             {
-                printf("Error: invalid output format '%s'\n", argv[argi+1]);
+                printf("Error: Invalid output format '%s'\n", argv[argi+1]);
                 return EXIT_FAILURE;
             }
             argi++;
@@ -85,7 +92,7 @@ int main(int argc, const char* argv[])
         case 'h':
             if(argi+1 >= argc)
             {
-                printf("Error: no header size specified for '-h'\n");
+                printf("Error: No header size specified for '-h'\n");
                 return EXIT_FAILURE;
             }
             n64sym.SetHeaderSize(strtoul(argv[argi+1], NULL, 0));
@@ -94,12 +101,12 @@ int main(int argc, const char* argv[])
         case 'o':
             if(argi+1 >= argc)
             {
-                printf("Error: no path specified for '-o'\n");
+                printf("Error: No path specified for '-o'\n");
                 return EXIT_FAILURE;
             }
             if(!n64sym.SetOutputPath(argv[argi+1]))
             {
-                printf("Error: could not open '%s'\n", argv[argi+1]);
+                printf("Error: Could not open '%s'\n", argv[argi+1]);
                 return EXIT_FAILURE;
             }
             argi++;

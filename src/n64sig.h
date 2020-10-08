@@ -17,6 +17,12 @@
 #ifndef N64SIG_H
 #define N64SIG_H
 
+typedef enum
+{
+    N64SIG_FMT_DEFAULT,
+    N64SIG_FMT_JSON
+} n64sig_output_fmt_t;
+
 class CN64Sig
 {
     typedef struct {
@@ -53,6 +59,7 @@ class CN64Sig
     std::vector<const char *> m_LibPaths;
 
     bool   m_bVerbose;
+    n64sig_output_fmt_t m_OutputFormat;
     size_t m_NumProcessedSymbols;
     
     static const char *GetRelTypeName(uint8_t relType);
@@ -70,6 +77,7 @@ public:
 
     void AddLibPath(const char *path);
     void SetVerbose(bool bVerbose);
+    bool SetOutputFormat(const char *format);
     bool Run();
 };
 

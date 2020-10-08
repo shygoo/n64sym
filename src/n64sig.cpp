@@ -27,6 +27,7 @@
 
 CN64Sig::CN64Sig() :
     m_bVerbose(false),
+    m_OutputFormat(N64SIG_FMT_DEFAULT),
     m_NumProcessedSymbols(0)
 {
 }
@@ -101,42 +102,99 @@ bool CN64Sig::Run()
         return stricmp(strPastUnderscores(a.name), strPastUnderscores(b.name)) < 0;
     });
 
-    for(auto& symbolEntry : symbols)
+    if(m_OutputFormat == N64SIG_FMT_DEFAULT)
     {
-        //symbol_entry_t& symbolEntry = i.second;
-
-        printf("%s 0x%04X 0x%08X 0x%08X\n",
-            symbolEntry.name,
-            symbolEntry.size,
-            symbolEntry.crc_a,
-            symbolEntry.crc_b);
-
-        if(symbolEntry.relocs == NULL)
+        for(auto& symbolEntry : symbols)
         {
-            continue;
-        }
+            printf("%s 0x%04X 0x%08X 0x%08X\n",
+                symbolEntry.name,
+                symbolEntry.size,
+                symbolEntry.crc_a,
+                symbolEntry.crc_b);
 
-        for(auto& j : *symbolEntry.relocs)
-        {
-            const reloc_entry_t& relocEntry = j.first;
-            const std::vector<uint16_t>& offsets = j.second;
-
-            printf(" .%-6s %s",
-                GetRelTypeName(relocEntry.relocType),
-                relocEntry.relocSymbolName);
-
-            for(auto& offset : offsets)
+            if(symbolEntry.relocs == NULL)
             {
-                printf(" 0x%03X", offset);
+                continue;
             }
+
+            for(auto& j : *symbolEntry.relocs)
+            {
+                const reloc_entry_t& relocEntry = j.first;
+                const std::vector<uint16_t>& offsets = j.second;
+
+                printf(" .%-6s %s",
+                    GetRelTypeName(relocEntry.relocType),
+                    relocEntry.relocSymbolName);
+
+                for(auto& offset : offsets)
+                {
+                    printf(" 0x%03X", offset);
+                }
+
+                printf("\n");
+            }
+
+            delete symbolEntry.relocs;
 
             printf("\n");
         }
-
-        delete symbolEntry.relocs;
-
-        printf("\n");
     }
+    else if(m_OutputFormat == N64SIG_FMT_JSON)
+    {
+/*
+["alCSPNew", 0x016C, 0x3DEB8DFE 0x8E97D34A, [
+    ["targ26", "__initChanState", [0x0A4]],
+    ["targ26", "alEvtqNew", [0x12C]]
+]]
+*/
+        printf("[\n");
+
+        bool bFirstSymbol = true;
+        for(auto& symbolEntry : symbols)
+        {
+            printf("%s  [\"%s\", %u, %u, %u, [",
+                (bFirstSymbol ? "" : ",\n"),
+                symbolEntry.name,
+                symbolEntry.size,
+                symbolEntry.crc_a,
+                symbolEntry.crc_b);
+
+            if(symbolEntry.relocs == NULL)
+            {
+                printf("]]");
+                continue;
+            }
+
+            printf("\n");
+
+            bool bFirstReloc = true;
+            for(auto& i : *symbolEntry.relocs)
+            {
+                const reloc_entry_t& relocEntry = i.first;
+                const std::vector<uint16_t>& offsets = i.second;
+
+                printf("%s    [\"%s\", \"%s\", [",
+                    (bFirstReloc ? "" : ",\n"),
+                    GetRelTypeName(relocEntry.relocType),
+                    relocEntry.relocSymbolName);
+
+                bool bFirstOffset = true;
+                for(auto& offset : offsets)
+                {
+                    printf("%s%d", (bFirstOffset ? "" : ", "), offset);
+                    bFirstOffset = false;
+                }
+
+                printf("]]");
+                bFirstReloc = false;
+            }
+
+            printf("\n  ]]");
+            bFirstSymbol = false;
+        }
+    }
+
+    printf("]");
 
     return true;
 }
@@ -445,4 +503,21 @@ void CN64Sig::ScanRecursive(const char* path)
 void CN64Sig::SetVerbose(bool bVerbose)
 {
     m_bVerbose = bVerbose;
+}
+
+bool CN64Sig::SetOutputFormat(const char *format)
+{
+    if(strcmp(format, "json") == 0)
+    {
+        m_OutputFormat = N64SIG_FMT_JSON;
+        return true;
+    }
+
+    if(strcmp(format, "default") == 0)
+    {
+        m_OutputFormat = N64SIG_FMT_DEFAULT;
+        return true;
+    }
+
+    return false;
 }

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>n64sym web</title>
+<script src="js/crc32.js"></script>
+<link href='https://fonts.googleapis.com/css?family=Open+Sans:400,400italic,700,700italic' rel='stylesheet' type='text/css'>
+<style>
+body, html {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 14px;
+    margin: 20px;
+    background: rgb(32,34,37);
+    color: #EEE;
+}
+
+div.results {
+    font-size: 12px;
+    font-family: 'Consolas', monospace;
+    height: 600px;
+    background-color: #111;
+    padding: 10px;
+    overflow: auto;
+    width: 600px;
+    box-sizing: border-box;
+}
+
+#progress-bar {
+    background-color: #AAA;
+    max-width: 600px;
+}
+
+#progress-fill {
+    background-color: #0FF;
+    height: 4px;
+    width: 0%;
+    padding: 0px;
+    margin: 0px;
+}
+
+label {
+    user-select: none;
+}
+
+div.ctrl
+{
+    margin-bottom: 10px;
+}
+
+#run-btn
+{
+    width: 70px;
+}
+
+</style>
+</head>
+<body>
+
+<div style="display: inline-block; background-color: rgb(47,49,54); padding: 10px;">
+<div style="font-size: 24px;">web64sym</div>
+<div>Load a Nintendo 64 ROM or RAM dump to scan it for symbols</div><br>
+<div class="ctrl"><input id="file" type="file"></div>
+<div class="ctrl"><label><input id="thorough-chk" type="checkbox">Thorough scan</label></div>
+<div class="ctrl" style="text-align: right;"><button id="run-btn">Run</button></div><br>
+<div id="progress-bar"><div id="progress-fill"></div></div>
+<div id="progress">&nbsp;</div><br>
+<div id="results" class="results"></div>
+<div id="rominfo"></div>
+</div>
+
+<script>
+
+function N64Sym()
+{
+    this.signatures = null;
+    this.binary = null;
+    this.dvBinary = null;
+    this.results = [];
+    this.likelyFunctionOffsets = [];
+    this.numActiveWorkers = 0;
+    this.numSignaturesScanned = 0;
+    this.percentScanned = 0;
+    this.entryPoint = 0;
+    this.endianCheck = 0;
+    this.bRom = false;
+    this.bootcheck = 0;
+    this.bootcode = 0;
+    this.bThoroughScan = false;
+
+    this.domFile = document.querySelector('#file');
+    this.domProgress = document.querySelector('#progress');
+    this.domResults = document.querySelector('#results');
+    this.domProgressFill = document.querySelector('#progress-fill');
+    this.domRomInfo = document.querySelector('#rominfo');
+
+    this.domRunBtn = document.querySelector('#run-btn');
+    this.domThoroughChk = document.querySelector('#thorough-chk');
+
+    this.domFile.addEventListener('change', (e) =>
+    {
+        var reader = new FileReader();
+
+        reader.onloadend = () =>
+        {
+            this.binary = new Uint8Array(reader.result);
+            this.dvBinary = new DataView(this.binary.buffer);
+        }
+        reader.readAsArrayBuffer(this.domFile.files[0]);
+    });
+
+    this.domThoroughChk.addEventListener('change', (e) => {
+        this.bThoroughScan = e.target.checked;
+    })
+
+    this.domRunBtn.addEventListener('click', (e) => {
+        this.domFile.setAttribute('disabled', '');
+        this.domRunBtn.setAttribute('disabled', '');
+        this.domThoroughChk.setAttribute('disabled', '');
+
+        this.setup();
+        this.scan();
+    });
+}
+
+N64Sym.prototype.loadSignatures = function(url)
+{
+    var xhr = new XMLHttpRequest();
+
+    xhr.onreadystatechange = () =>
+    {
+        if(xhr.readyState == XMLHttpRequest.DONE /*&& xhr.status == 200*/)
+        {
+            this.signatures = JSON.parse(xhr.response);
+        }
+    }
+
+    xhr.open("get", url, true);
+    xhr.send();
+}
+
+N64Sym.prototype.redrawResults = function()
+{
+    this.domResults.innerHTML = '';
+
+    this.results.forEach(result => {
+        var domResult = document.createElement('div');
+        var address = this.entryPoint + result.offset;
+        domResult.appendChild(new Text(address.toString(16).toUpperCase() + " " + result.name));
+        this.domResults.appendChild(domResult);
+    });
+}
+
+N64Sym.prototype.createScanWorker = function()
+{
+    var worker = new Worker("js/n64sym-worker.js");
+
+    worker.onmessage = (e) =>
+    {
+        var message = e.data;
+    
+        switch(message['status'])
+        {
+        case 'result':
+            var result = { name: message['name'], offset: message['offset'] };
+            this.results.push(result);
+            this.results.sort((a, b) => a.offset - b.offset);
+            this.redrawResults();
+            break;
+        case 'done':
+            this.numActiveWorkers--;
+            if(this.numActiveWorkers == 0)
+            {
+                this.domProgressFill.style.width = "0%";
+                this.domProgress.innerHTML = "Found " + this.results.length + " symbols";
+                this.domFile.removeAttribute('disabled');
+                this.domThoroughChk.removeAttribute('disabled');
+                this.domRunBtn.removeAttribute('disabled');
+            }
+            break;
+        case 'progress':
+            this.numSignaturesScanned++;
+            
+            var percentScannedNow = (this.numSignaturesScanned / this.signatures.length) * 100;
+            percentScannedNow = Math.round(percentScannedNow * 10) / 10; // round to nearest .5
+
+            if(percentScannedNow > this.percentScanned)
+            {
+                this.percentScanned = percentScannedNow;
+                this.domProgressFill.style.width = this.percentScanned + "%";
+                this.domProgress.innerHTML = (this.percentScanned | 0) + "%";
+            }
+            break;
+        }
+    }
+
+    return worker;
+}
+
+N64Sym.prototype.setup = function()
+{
+    this.results = [];
+    this.likelyFunctionOffsets = [];
+    this.numSignaturesScanned = 0;
+    this.percentScanned = 0;
+
+    this.bRom = false;
+    this.endianCheck = this.dvBinary.getUint32(0x00);
+
+    switch(this.endianCheck)
+    {
+    case 0x80371240:
+        this.bRom = true;
+        break;
+    case 0x40123780:
+        for(var i = 0; i < this.dvBinary.byteLength; i += 4)
+        {
+            this.dvBinary.setUint32(i, this.dvBinary.getUint32(i, true));
+        }
+        this.bRom = true;
+        break;
+    case 0x37804012:
+        for(var i = 0; i < dvBinary.byteLength; i += 2)
+        {
+            this.dvBinary.setUint16(i, this.dvBinary.getUint16(i, true));
+        }
+        this.bRom = true;
+        break;
+    }
+
+    if(this.bRom)
+    {
+        this.entryPoint = this.dvBinary.getUint32(0x08) - 0x1000;
+        this.bootcheck = crc32(this.binary, 0x40, 0xFC0);
+        this.bootcode = 0;
+
+        switch(this.bootcheck)
+        {
+        case 0x6170A4A1:
+            this.bootcode = 6101;
+            break;
+	    case 0x90BB6CB5:
+            this.bootcode = 6102;
+            break;
+	    case 0x0B050EE0:
+            this.bootcode = 6103;
+            this.entryPoint -= 0x100000;
+            break;
+	    case 0x98BC2C86:
+            this.bootcode = 6105;
+            break;
+	    case 0xACC8580A:
+            this.bootcode = 6106;
+            this.entryPoint -= 0x200000;
+            break;
+        }
+    }
+
+    //this.entryPoint = 0;
+
+    var offsets = new Set();
+
+    for(var offset = 0; offset < this.dvBinary.byteLength; offset += 4)
+    {
+        var word = this.dvBinary.getUint32(offset);
+
+        // JR RA + 8
+        if(word == 0x03E00008)
+        {
+            for(var i = 8;; i += 4)
+            {
+                if(this.dvBinary.getUint32(offset + i) != 0x00000000)
+                {
+                    offsets.add(offset + i);
+                    break;
+                }
+            }
+        }
+
+        // ADDIU SP, SP, -n
+        if((word & 0xFFFF0000) == 0x27BD0000 && this.dvBinary.getInt16(offset + 2) < 0)
+        {
+            offsets.add(offset);
+        }
+    }
+
+    this.likelyFunctionOffsets = Array.from(offsets);
+
+    console.log(this.likelyFunctionOffsets)
+}
+
+N64Sym.prototype.scan = function()
+{
+    if(this.binary == null || this.signatures == null)
+    {
+        return;
+    }
+
+    var numCpuCores = navigator.hardwareConcurrency || 1;
+
+    var sigIndex = 0;
+    var sigCount = (this.signatures.length / numCpuCores) | 0;
+    var remainder = this.signatures.length % numCpuCores;
+
+    var worker = this.createScanWorker();
+    this.numActiveWorkers++;
+    worker.postMessage({
+        binary: this.binary,
+        signatures: this.signatures,
+        index: sigIndex,
+        count: sigCount + remainder,
+        offsets: this.likelyFunctionOffsets,
+        thorough: this.bThoroughScan
+    });
+
+    sigIndex += sigCount;
+
+    for(var i = 1; i < numCpuCores; i++)
+    {
+        worker = this.createScanWorker();
+        this.numActiveWorkers++;
+        worker.postMessage({
+            binary: this.binary,
+            signatures: this.signatures,
+            index: sigIndex,
+            count: sigCount,
+            offsets: this.likelyFunctionOffsets,
+            thorough: this.bThoroughScan
+        });
+
+        sigIndex += sigCount;
+    }
+}
+
+N64Sym.prototype.useThoroughScan = function(bUseThoroughScan)
+{
+    this.bThoroughScan = bUseThoroughScan;
+}
+
+var n64sym = new N64Sym();
+n64sym.loadSignatures('signatures.json');
+
+</script>
+</body>
+</html>

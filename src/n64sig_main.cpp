@@ -16,9 +16,12 @@ int main(int argc, const char *argv[])
 {
     if(argc < 2)
     {
-        printf(
+        printf (
             "n64sig - signature file generator for n64sym (https://github.com/n64sym)\n\n"
-            "  Usage: n64sig <library/object path(s)>\n"
+            "  Usage: n64sig [options]\n\n"
+            "  Options:\n"
+            "    -l <lib/obj path>     add a library/object path\n"
+            "    -f <format>           set the output format (json, default)\n"
         );
 
         return EXIT_FAILURE;
@@ -26,9 +29,51 @@ int main(int argc, const char *argv[])
 
     CN64Sig n64sig;
 
-    // n64sig.SetVerbose(true);
+    for(int argi = 1; argi < argc; argi++)
+    {
+        printf("[%s]\n", argv[argi]);
 
-    n64sig.AddLibPath(argv[1]);
+        if(argv[argi][0] != '-')
+        {
+            printf("Error: Unexpected '%s' in command line\n", argv[argi]);
+            return EXIT_FAILURE;
+        }
+
+        if(strlen(&argv[argi][1]) != 1)
+        {
+            printf("Error: Invalid switch '%s'\n", argv[argi]);
+            return EXIT_FAILURE;
+        }
+
+        switch(argv[argi][1])
+        {
+        case 'l':
+            if(argi+1 >= argc)
+            {
+                printf("Error: No path specified for '-l'\n");
+            }
+            n64sig.AddLibPath(argv[argi+1]);
+            argi++;
+            break;
+        case 'f':
+            if(argi+1 >= argc)
+            {
+                printf("Error: No output format specified for '-f'\n");
+                return EXIT_FAILURE;
+            }
+            if(!n64sig.SetOutputFormat(argv[argi+1]))
+            {
+                printf("Error: Invalid output format '%s'\n", argv[argi+1]);
+                return EXIT_FAILURE;
+            }
+            argi++;
+            break;
+        case 'v':
+            n64sig.SetVerbose(true);
+            break;
+        }
+    }
+
     n64sig.Run();
 
     return EXIT_SUCCESS;
