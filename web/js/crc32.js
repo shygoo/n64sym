@@ -1,4 +1,17 @@
-const CRC32Table = (function()
+function CRC32()
+{
+    this.crc = 0xFFFFFFFF;
+    this.result = 0;
+}
+
+function crc32(arr, offs, size)
+{
+    var crc = new CRC32();
+    crc.read(arr, offs, size);
+    return crc.result;
+}
+
+CRC32.TABLE = (function()
 {
     var table = [];
 
@@ -8,7 +21,7 @@ const CRC32Table = (function()
 
         for(var j = 0; j < 8; j++)
         {
-            crc = (crc & 1) ? (crc >>> 1) ^ 0xEDB88320 : (crc >>> 1)
+            crc = (crc & 1) ? (crc >>> 1) ^ 0xEDB88320 : (crc >>> 1);
         }
 
         table.push(crc >>> 0);
@@ -17,14 +30,17 @@ const CRC32Table = (function()
     return table;
 })();
 
-function crc32(arr, offs, size)
+CRC32.prototype.reset = function()
 {
-    var crc = 0xFFFFFFFF;
+    this.crc = 0xFFFFFFFF;
+}
 
-    for(var i = 0; i < size; i++)
+CRC32.prototype.read = function(arr, offs, length)
+{
+    for(var i = 0; i < length; i++)
     {
-        crc = (CRC32Table[(crc & 0xFF) ^ arr[offs + i]] ^ (crc >>> 8)) >>> 0;
+        this.crc = (CRC32.TABLE[(this.crc & 0xFF) ^ arr[offs + i]] ^ (this.crc >>> 8)) >>> 0;
     }
 
-    return (~crc) >>> 0;
+    this.result = (~this.crc) >>> 0;
 }
