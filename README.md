@@ -94,4 +94,4 @@ Run `make` to build `n64sym` and `n64sig`.
  
 ## Built-in signatures
 
-Create a directory in the project root named `oslibs` and drop the desired library/object files in it. Then run `make rebuild_sigs` to rebuild `src/builtin_sigs.sig` and `web/signatures.json`.
+Create a directory in the project root named `oslibs` and drop the desired library/object files in it. Then run `make rebuild_sigs` to rebuild `src/builtin_signatures.sig` and `web/signatures.json`.
