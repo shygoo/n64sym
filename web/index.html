@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Hack64 - Web n64sym</title>
+<meta name="description" content="Symbol scanner for Nintendo 64 ROM/RAM dumps"/>
+<script src="js/crc32.js"></script>
+<link href='https://fonts.googleapis.com/css?family=Open+Sans:400,400italic,700,700italic' rel='stylesheet' type='text/css'>
+<style>
+body, html, input, button, select {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 14px;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    background: rgb(32,34,37);
+    color: #EEE;
+}
+
+body {
+    margin: 0px;
+}
+
+div.results {
+    font-size: 12px;
+    font-family: 'Consolas', monospace;
+    height: 300px;
+    background-color: #1a1a1a;
+    padding: 10px;
+    overflow: auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#progress-bar {
+    background-color: #AAA;
+    max-width: 600px;
+}
+
+#progress-fill {
+    background-color: #0FF;
+    height: 3px;
+    width: 0%;
+    padding: 0px;
+    margin: 0px;
+}
+
+input[type='file'] {
+    background-color: rgba(0,0,0,0.15);
+    padding: 10px;
+}
+
+label {
+    user-select: none;
+}
+
+#run-btn
+{
+    width: 70px;
+}
+
+div.desc {
+    font-size: 11px;
+    color: #888;
+}
+
+a {
+    text-decoration: none;
+    color: #30A2EC;
+}
+
+td {
+    padding: 10px;
+}
+
+label {
+    padding: 5px;
+    background-color:rgba(0,0,0,0.15);
+    font-size: 12px;
+}
+
+label input[type="checkbox"] {
+    vertical-align: middle;
+}
+
+label span {
+    margin-left: 5px;
+}
+</style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; width: 100%; height: 100%;">
+    <div style="flex: 1;"></div>
+    <div style="flex: 1; flex-grow: 0; text-align: center;">
+        <div style="display: inline-block; background-color: rgb(47,49,54); text-align:left;">
+            <div style="text-align: center; padding: 10px;">
+                <div style="font-size: 24px;">Web n64sym</div>
+                <div class="desc">Symbol scanner for Nintendo 64 ROM/RAM dumps &bull; <a href="https://github.com/shygoo/n64sym">Source</a></div>
+            </div>
+            <table style="padding: 10px;">
+                <tr>
+                    <td>Binary</td>
+                    <td><input id="file" type="file"></td>
+                </tr>
+                <tr>
+                    <td>Output</td>
+                    <td>
+                        <select id="output-select">
+                            <option value="default">Default</option>
+                            <option value="pj64">Project64 (*.sym)</option>
+                            <option value="nemu64">Nemu64 (*.nbm)</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+            <table style="width: 100%;">
+                <tr>
+                    <td><label><input id="thorough-chk" type="checkbox"><span>Thorough scan</span></label></td>
+                    <td style="text-align: right;"><button id="run-btn" disabled>Run</button></td>
+                </tr>
+            </table>
+            <div id="results" class="results"></div>
+            <div>
+                <div id="progress-bar"><div id="progress-fill"></div></div>
+            </div>
+            <div style="padding: 5px;">
+                <span id="num-results"></span>
+                <span id="copy-link-span" style="display: none;">&bull; <a href="#" onclick="n64sym.copyResultsToClipboard()" title="Copy results to the clipboard">Copy</a></span>
+                <span id="progress-percent">&nbsp;</span>
+            </div>
+            <!--<div id="rominfo"></div>-->
+        </div>
+    </div>
+    <div style="flex: 1;"></div>
+    <textarea id="results-copy" style="position: fixed; display: none;"></textarea>
+</div>
+<script>
+class N64Sym
+{
+    constructor()
+    {
+        this.signatures = null;
+        this.binary = null;
+        this.dvBinary = null;
+        this.results = [];
+        this.relocResults = [];
+        this.likelyFunctionOffsets = [];
+        this.numActiveWorkers = 0;
+        this.numSignaturesScanned = 0;
+        this.percentScanned = 0;
+        this.entryPoint = 0;
+        this.endianCheck = 0;
+        this.bRom = false;
+        this.bootcheck = 0;
+        this.bootcode = 0;
+        this.bThoroughScan = false;
+
+        this.dom = {};
+
+        var domQueries = {
+            'file': '#file',
+            'outputSelect': '#output-select',
+            'thoroughChk': '#thorough-chk',
+            'runBtn': '#run-btn',
+            'results': '#results',
+            'resultsCopy': '#results',
+            'progressFill': '#progress-fill',
+            'numResults': '#num-results',
+            'progressPercent': '#progress-percent',
+            'copyLinkSpan': '#copy-link-span'
+        };
+
+        for(var key in domQueries)
+        {
+            this.dom[key] = document.querySelector(domQueries[key]);
+        }
+
+        this.dom['file'].addEventListener('change', (e) => {
+            var reader = new FileReader();
+
+            reader.onloadend = () => {
+                this.binary = new Uint8Array(reader.result);
+                this.dvBinary = new DataView(this.binary.buffer);
+                this.dom['runBtn'].removeAttribute('disabled');
+            }
+            reader.readAsArrayBuffer(this.dom['file'].files[0]);
+        });
+
+        this.dom['thoroughChk'].addEventListener('change', (e) => {
+            this.bThoroughScan = e.target.checked;
+        })
+
+        this.dom['runBtn'].addEventListener('click', (e) => {
+            var elems = [ this.dom['file'], this.dom['thoroughChk'], this.dom['runBtn'], this.dom['outputSelect'] ];
+            elems.forEach(elem => elem.setAttribute('disabled', ''));
+            this.setup();
+            this.scan();
+        });
+    }
+
+    loadSignatures(url)
+    {
+        var xhr = new XMLHttpRequest();
+
+        xhr.onreadystatechange = () => {
+            if(xhr.readyState == XMLHttpRequest.DONE /*&& xhr.status == 200*/)
+            {
+                this.signatures = JSON.parse(xhr.response);
+                console.log("Loaded " + this.signatures.length + " signatures")
+            }
+        }
+
+        xhr.open("get", url, true);
+        xhr.send();
+    }
+
+    redrawResults()
+    {
+        this.dom['results'].innerHTML = '';
+
+        this.results.forEach(result => {
+            var domResult = document.createElement('div');
+            var address = result.address || (this.entryPoint + result.offset);
+            domResult.appendChild(new Text(address.toString(16).toUpperCase() + " " + result.name));
+            this.dom['results'].appendChild(domResult);
+        });
+    }
+
+    onScanFinished()
+    {
+        this.updateCopyText();
+
+        this.dom['progressFill'].style.width = "0%";
+        this.dom['progressPercent'].innerHTML = "&nbsp;";
+        this.dom['numResults'].innerHTML = this.results.length + " results";
+        this.dom['numResults'].style.display = "inline-block";
+        this.dom['copyLinkSpan'].style.display = "inline-block";
+
+        var elems = [ this.dom['file'], this.dom['thoroughChk'], this.dom['runBtn'], this.dom['outputSelect'] ];
+        elems.forEach(elem => elem.removeAttribute('disabled'));
+    }
+
+    updateCopyText()
+    {
+        var copyText = "";
+
+        this.results.forEach(result => {
+            var address = result.address || (this.entryPoint + result.offset);
+            copyText += address.toString(16).toUpperCase() + " " + result.name + "\n";
+        });
+
+        this.dom['resultsCopy'].innerText = copyText;
+    }
+
+    copyResultsToClipboard()
+    {
+        this.dom['resultsCopy'].style.display = "inline-block";
+        this.dom['resultsCopy'].select();
+        document.execCommand('copy');
+        this.dom['resultsCopy'].style.display = "none";
+    }
+
+    createScanWorker()
+    {
+        var worker = new Worker("js/n64sym-worker.js");
+
+        worker.onmessage = (e) =>
+        {
+            var message = e.data;
+        
+            const dispatch = {
+                result: () => {
+                    this.addResult({ name: message['name'], offset: message['offset'] });
+                },
+                reloc_result: () => {
+                    this.addResult({ name: message['name'], address: message['address'] });
+                },
+                progress: () => {
+                    this.numSignaturesScanned++;
+                
+                    var percentScannedNow = (this.numSignaturesScanned / this.signatures.length) * 100;
+                    percentScannedNow = Math.round(percentScannedNow * 10) / 10; // round to nearest 0.10
+
+                    if(percentScannedNow > this.percentScanned)
+                    {
+                        this.percentScanned = percentScannedNow;
+                        this.dom['progressFill'].style.width = this.percentScanned + "%";
+                        this.dom['progressPercent'].innerHTML = (this.percentScanned | 0) + "%";
+                    }
+                },
+                done: () => {
+                    this.numActiveWorkers--;
+                    if(this.numActiveWorkers == 0)
+                    {
+                        this.onScanFinished();
+                    }
+                },
+            };
+
+            if(message['status'] in dispatch)
+            {
+                dispatch[message['status']]();
+            }
+        }
+
+        return worker;
+    }
+
+    setup()
+    {
+        this.results = [];
+        this.likelyFunctionOffsets = [];
+        this.numSignaturesScanned = 0;
+        this.percentScanned = 0;
+        this.bRom = false;
+
+        this.romEndianCheck();
+        this.locateEntryPoint();
+        this.collectLikelyFunctionOffsets();
+    }
+
+    romEndianCheck()
+    {
+        this.endianCheck = this.dvBinary.getUint32(0x00);
+
+        switch(this.endianCheck)
+        {
+        case 0x80371240:
+            this.bRom = true;
+            break;
+        case 0x40123780:
+            for(var i = 0; i < this.dvBinary.byteLength; i += 4)
+            {
+                this.dvBinary.setUint32(i, this.dvBinary.getUint32(i, true));
+            }
+            this.bRom = true;
+            break;
+        case 0x37804012:
+            for(var i = 0; i < dvBinary.byteLength; i += 2)
+            {
+                this.dvBinary.setUint16(i, this.dvBinary.getUint16(i, true));
+            }
+            this.bRom = true;
+            break;
+        }
+    }
+
+    locateEntryPoint()
+    {
+        if(this.bRom)
+        {
+            this.entryPoint = this.dvBinary.getUint32(0x08) - 0x1000;
+            this.bootcheck = crc32(this.binary, 0x40, 0xFC0);
+            this.bootcode = 0;
+
+            switch(this.bootcheck)
+            {
+            case 0x6170A4A1:
+                this.bootcode = 6101;
+                break;
+	        case 0x90BB6CB5:
+                this.bootcode = 6102;
+                break;
+	        case 0x0B050EE0:
+                this.bootcode = 6103;
+                this.entryPoint -= 0x100000;
+                break;
+	        case 0x98BC2C86:
+                this.bootcode = 6105;
+                break;
+	        case 0xACC8580A:
+                this.bootcode = 6106;
+                this.entryPoint -= 0x200000;
+                break;
+            }
+        }
+    }
+
+    collectLikelyFunctionOffsets()
+    {
+        var offsets = new Set();
+
+        for(var offset = 0; offset < this.dvBinary.byteLength; offset += 4)
+        {
+            var word = this.dvBinary.getUint32(offset);
+
+            // JR RA + 8
+            if(word == 0x03E00008)
+            {
+                for(var i = 8;; i += 4)
+                {
+                    if(this.dvBinary.getUint32(offset + i) != 0x00000000)
+                    {
+                        offsets.add(offset + i);
+                        break;
+                    }
+                }
+            }
+
+            // ADDIU SP, SP, -n
+            if((word & 0xFFFF0000) == 0x27BD0000 && this.dvBinary.getInt16(offset + 2) < 0)
+            {
+                offsets.add(offset);
+            }
+        }
+
+        this.likelyFunctionOffsets = Array.from(offsets);
+    }
+
+    scan()
+    {
+        if(this.binary == null || this.signatures == null)
+        {
+            return;
+        }
+
+        this.dom['numResults'].style.display = "none";
+        this.dom['copyLinkSpan'].style.display = "none";
+
+        var numCpuCores = navigator.hardwareConcurrency || 1;
+
+        var sigIndex = 0;
+        var sigsPerThread = (this.signatures.length / numCpuCores) | 0;
+        var remainder = this.signatures.length % numCpuCores;
+
+        for(var i = 0; i < numCpuCores; i++)
+        {
+            var worker = this.createScanWorker();
+            this.numActiveWorkers++;
+            worker.postMessage({
+                binary: this.binary,
+                signatures: this.signatures,
+                index: sigIndex,
+                count: sigsPerThread + remainder,
+                offsets: this.likelyFunctionOffsets,
+                thorough: this.bThoroughScan
+            });
+
+            sigIndex += sigsPerThread + remainder;
+
+            if(remainder > 0)
+            {
+                remainder = 0;
+            }
+        }
+    }
+
+    addResult(result)
+    {
+        var resAddr = result.address || (this.entryPoint + result.offset);
+
+        for(var i in this.results)
+        {
+            var address = this.results[i].address || (this.entryPoint + this.results[i].offset);
+            if(resAddr == address)
+            {
+                return;
+            }
+        }
+
+        this.results.push(result);
+
+        this.results.sort((a, b) => {
+            var addrA = a.address || (a.offset + this.entryPoint);
+            var addrB = b.address || (b.offset + this.entryPoint);
+            return addrA - addrB;
+        });
+
+        this.redrawResults();
+    }
+
+    useThoroughScan(bUseThoroughScan)
+    {
+        this.bThoroughScan = bUseThoroughScan;
+    }
+}
+
+var n64sym = new N64Sym();
+n64sym.loadSignatures('signatures.json');
+
+</script>
+</body>
+</html>

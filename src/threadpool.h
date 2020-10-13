@@ -1,3 +1,14 @@
+/*
+
+    thread management for n64sym
+    shygoo 2017
+    License: MIT
+    
+*/
+
+#ifndef THREADPOOL_H
+#define THREADPOOL_H
+
 #include <pthread.h>
 
 class CThreadPool
@@ -34,3 +45,5 @@ public:
     void LockDefaultMutex();
     void UnlockDefaultMutex();
 };
+
+#endif // THREADPOOL_H

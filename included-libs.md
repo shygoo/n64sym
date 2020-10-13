@@ -1,0 +1,78 @@
+## Included libraries
+
+The built-in signature file includes signatures for symbols from the following libraries:
+
+ - OS 2.0c libultra.a
+ - OS 2.0c libultra_d.a
+ - OS 2.0c libultra_rom.a
+ - OS 2.0h libgultra.a
+ - OS 2.0h libgultra_d.a
+ - OS 2.0h libgultra_rom.a
+ - OS 2.0h libleo.a
+ - OS 2.0h libleo_d.a
+ - OS 2.0h libleo_er.a
+ - OS 2.0h libleo_sp.a
+ - OS 2.0h libnos.a
+ - OS 2.0h libnos_jpn.a
+ - OS 2.0i libgultra.a
+ - OS 2.0i libgultra_d.a
+ - OS 2.0i libgultra_rom.a
+ - OS 2.0i libleo.a
+ - OS 2.0i libleo_d.a
+ - OS 2.0i libultra.a
+ - OS 2.0i libultra_d.a
+ - OS 2.0i libultra_rom.a
+ - OS 2.0j libgn_audio.a
+ - OS 2.0j libgultra.a
+ - OS 2.0j libgultra_d.a
+ - OS 2.0j libgultra_rom.a
+ - OS 2.0j libleo.a
+ - OS 2.0j libleo_d.a
+ - OS 2.0j libn_audio.a
+ - OS 2.0j libultra.a
+ - OS 2.0j libultra_d.a
+ - OS 2.0j libultra_rom.a
+ - OS 2.0k libgn_audio.a
+ - OS 2.0k libgn_audio_d.a
+ - OS 2.0k libgultra.a
+ - OS 2.0k libgultra_d.a
+ - OS 2.0k libgultra_rom.a
+ - OS 2.0k libleo.a
+ - OS 2.0k libleo_d.a
+ - OS 2.0l libgn_audio.a
+ - OS 2.0l libgn_audio_d.a
+ - OS 2.0l libgultra.a
+ - OS 2.0l libgultra_d.a
+ - OS 2.0l libgultra_rom.a
+ - OS 2.0l libleo.a
+ - OS 2.0l libleo_d.a
+ - OS 2.0l libn_audio.a
+ - OS 2.0l libn_audio_d.a
+ - OS 2.0l libultra.a
+ - OS 2.0l libultra_d.a
+ - OS 2.0l libultra_rom.a
+ - Psy-Q SN64 libultra.a
+ - Psy-Q SN64 libultra_rom.a
+ - iQue libcrypto.a
+ - iQue libfb.a
+ - iQue libgcc.a
+ - iQue libmus.a
+ - iQue libmus_d.a
+ - iQue libn_audio.a
+ - iQue libn_mus.a
+ - iQue libn_mus_d.a
+ - iQue libnustd.a
+ - iQue libultra.a
+ - iQue libultra_d.a
+ - iQue libultra_rom.a
+ - iQue libz.a
+ - Microcodes included with 2.0i, 2.0j, 2.0k, 2.0l
+
+## Missing libraries
+
+ - Libraries from versions OS versions 2.0d through 2.0g
+ - OS 2.0h: libultra.a, libultra_rom.a, libultra_d.a, libn_audio.a(?), libgn_audio.a(?)
+ - OS 2.0i: libn_audio.a(?), libgn_audio.a(?)
+ - OS 2.0k: libultra.a, libn_audio.a
+ - Psy-Q SN64 *.lib files
+ - I am not 100% sure that the "2.0c" libraries I have are actually 2.0c

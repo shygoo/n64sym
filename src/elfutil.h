@@ -3,7 +3,7 @@
     elfutil
 
     Basic 32-bit big endian ELF reader
-    shygoo 2018
+    shygoo 2018, 2020
     License: MIT
 
     https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
@@ -21,23 +21,23 @@
 #include <stdint.h>
 
 #ifndef bswap32
-	#ifdef __GNUC__
-		#define bswap32 __builtin_bswap32
-	#elif _MSC_VER
-		#define bswap32 _byteswap_ulong
-	#else
-		#define bswap32(n) (((unsigned)n & 0xFF000000) >> 24 | (n & 0xFF00) << 8 | (n & 0xFF0000) >> 8 | n << 24)
-	#endif
+    #ifdef __GNUC__
+        #define bswap32 __builtin_bswap32
+    #elif _MSC_VER
+        #define bswap32 _byteswap_ulong
+    #else
+        #define bswap32(n) (((unsigned)n & 0xFF000000) >> 24 | (n & 0xFF00) << 8 | (n & 0xFF0000) >> 8 | n << 24)
+    #endif
 #endif
 
 #ifndef bswap16
-	#ifdef __GNUC__
-		#define bswap16 __builtin_bswap16
-	#elif _MSC_VER
-		#define bswap16 _byteswap_ushort
-	#else
-		#define bswap16(n) (((unsigned)n & 0xFF00) >> 8 | n << 8)
-	#endif
+    #ifdef __GNUC__
+        #define bswap16 __builtin_bswap16
+    #elif _MSC_VER
+        #define bswap16 _byteswap_ushort
+    #else
+        #define bswap16(n) (((unsigned)n & 0xFF00) >> 8 | n << 8)
+    #endif
 #endif
 
 #define EI_MAG0        0
@@ -70,27 +70,27 @@
 #define R_MIPS_CALL16  21
 
 // special section numbers
-#define SHN_UNDEF 0
-#define SHN_LORESERVE 0xff00
-#define SHN_LOPROC 0xff00
-#define SHN_HIPROC 0xff1f
-#define SHN_ABS 0xfff1
-#define SHN_COMMON 0xfff2
-#define SHN_HIRESERVE 0xffff
+#define SHN_UNDEF     0x0000
+#define SHN_LORESERVE 0xFF00
+#define SHN_LOPROC    0xFF00
+#define SHN_HIPROC    0xFF1F
+#define SHN_ABS       0xFFF1
+#define SHN_COMMON    0xFFF2
+#define SHN_HIRESERVE 0xFFFF
 
 // symbol bindings
-#define STB_LOCAL 0
-#define STB_GLOBAL 1
-#define STB_WEAK 2
+#define STB_LOCAL   0
+#define STB_GLOBAL  1
+#define STB_WEAK    2
 #define STB_LOPROC 13
 #define STB_HIPROC 15
 
 // symbol types
-#define STT_NOTYPE 0
-#define STT_OBJECT 1
-#define STT_FUNC 2
+#define STT_NOTYPE  0
+#define STT_OBJECT  1
+#define STT_FUNC    2
 #define STT_SECTION 3
-#define STT_FILE 4
+#define STT_FILE    4
 #define STT_LOPROC 13
 #define STT_HIPROC 15
 
@@ -120,22 +120,25 @@ typedef struct CElfHeader
 
 class CElfContext
 {
-    CElfHeader* m_ElfHeader;
+    //CElfHeader* m_ElfHeader;
+    uint8_t *m_Buffer;
     size_t m_Size;
 
-    CElfContext();
-
 public:
-    CElfContext(const char* buffer, size_t bufferSize);
+    CElfHeader* Header() { return (CElfHeader *)m_Buffer; }
 
-    uint8_t  ABI() { return m_ElfHeader->e_ident[EI_OSABI]; }
-    uint16_t Machine() { return bswap16(m_ElfHeader->e_machine); }
-    uint32_t SectionHeaderOffset() { return bswap32(m_ElfHeader->e_shoff); }
-    uint16_t SectionHeaderEntrySize() { return bswap16(m_ElfHeader->e_shentsize); }
-    uint16_t NumSections() { return bswap16(m_ElfHeader->e_shnum); }
-    uint16_t SectionNamesIndex() { return bswap16(m_ElfHeader->e_shstrndx); }
+    CElfContext();
+    
+    bool Load(const char *path);
+    bool LoadFromMemory(uint8_t *buffer, size_t size);
 
-    CElfHeader* Header() { return m_ElfHeader; }
+    uint8_t  ABI() { return Header()->e_ident[EI_OSABI]; }
+    uint16_t Machine() { return bswap16(Header()->e_machine); }
+    uint32_t SectionHeaderOffset() { return bswap32(Header()->e_shoff); }
+    uint16_t SectionHeaderEntrySize() { return bswap16(Header()->e_shentsize); }
+    uint16_t NumSections() { return bswap16(Header()->e_shnum); }
+    uint16_t SectionNamesIndex() { return bswap16(Header()->e_shstrndx); }
+
     size_t Size() { return m_Size; }
 
     CElfSection* Section(int index);

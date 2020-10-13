@@ -1,9 +1,18 @@
+/*
+
+    thread management for n64sym
+    shygoo 2017
+    License: MIT
+    
+*/
+
 #include "threadpool.h"
 
 #include <pthread.h>
 #include <unistd.h>
 
-#include <stdio.h>
+#include <cstring>
+#include <cstdio>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -27,13 +36,13 @@ CThreadPool::~CThreadPool()
 
 int CThreadPool::GetNumCPUCores()
 {
-	#ifdef _WIN32
-	SYSTEM_INFO info;
-	GetSystemInfo(&info);
-	return (int)info.dwNumberOfProcessors;
-	#else
-	return sysconf(_SC_NPROCESSORS_ONLN);
-	#endif
+    #ifdef _WIN32
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    return (int)info.dwNumberOfProcessors;
+    #else
+    return sysconf(_SC_NPROCESSORS_ONLN);
+    #endif
 }
 
 void* CThreadPool::RoutineProc(void* _worker)
@@ -41,6 +50,7 @@ void* CThreadPool::RoutineProc(void* _worker)
     worker_context_t* worker = (worker_context_t*) _worker;
     worker->routine(worker->param);
     worker->bRunning = false;
+    return NULL;
 }
 
 void CThreadPool::AddWorker(worker_routine_t routine, void* param)
