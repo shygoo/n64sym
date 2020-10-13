@@ -13,6 +13,7 @@ N64SYM=$(BIN_DIR)/n64sym
 N64SIG=$(BIN_DIR)/n64sig
 
 BUILTIN_SIGS=$(SRC_DIR)/builtin_signatures.sig
+BUILTIN_SIGS_JSON=web/signatures.json
 BUILTIN_SIGS_DEFL=$(BUILD_DIR)/builtin_signatures.sig.defl
 
 COMPRESS=tools/bin/compress
@@ -96,7 +97,8 @@ clean:
 ########################################
 
 rebuild_sigs: $(N64SIG)
-	$(N64SIG) oslibs > $(BUILTIN_SIGS)
+	$(N64SIG) -l oslibs > $(BUILTIN_SIGS)
+	$(N64SIG) -l oslibs -f json > $(BUILTIN_SIGS_JSON)
 
 test: $(N64SYM)
 	$(N64SYM) test/sm64.bin -s

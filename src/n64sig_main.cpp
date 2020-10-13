@@ -17,7 +17,7 @@ int main(int argc, const char *argv[])
     if(argc < 2)
     {
         printf (
-            "n64sig - signature file generator for n64sym (https://github.com/n64sym)\n\n"
+            "n64sig - signature file generator for n64sym (https://github.com/shygoo/n64sym)\n\n"
             "  Usage: n64sig [options]\n\n"
             "  Options:\n"
             "    -l <lib/obj path>     add a library/object path\n"
@@ -31,7 +31,7 @@ int main(int argc, const char *argv[])
 
     for(int argi = 1; argi < argc; argi++)
     {
-        printf("[%s]\n", argv[argi]);
+        //printf("[%s]\n", argv[argi]);
 
         if(argv[argi][0] != '-')
         {

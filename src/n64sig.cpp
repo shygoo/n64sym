@@ -192,9 +192,11 @@ bool CN64Sig::Run()
             printf("\n  ]]");
             bFirstSymbol = false;
         }
+        
+        printf("]");
     }
 
-    printf("]");
+    
 
     return true;
 }
