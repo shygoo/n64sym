@@ -28,6 +28,8 @@ self.onmessage = function(e)
     var offsets = e.data.offsets;
     var thorough = e.data.thorough;
 
+    console.log("task", sigIndex, sigCount);
+
     for(var i = 0; i < sigCount; i++)
     {
         var symbol = new Symbol(signatures[sigIndex + i]);
@@ -83,6 +85,8 @@ function readStrippedOpcode(binary, offset, relocType)
     return opcode;
 }
 
+var test = 0;
+
 function testSymbol(binary, offset, symbol)
 {
     var crcA = new CRC32();
@@ -131,9 +135,10 @@ function testSymbol(binary, offset, symbol)
 
     if(fnOffset < crcA_limit)
     {
-        crcA.read(binary, offset + fnOffset, crcA_limit - fnOffset);
-        crcB.read(binary, offset + fnOffset, crcA_limit - fnOffset);
-        fnOffset = crcA_limit;
+        var length = crcA_limit - fnOffset;
+        crcA.read(binary, offset + fnOffset, length);
+        crcB.read(binary, offset + fnOffset, length);
+        fnOffset += length;
     }
 
     if(crcA.result != symbol.crcA)
@@ -147,7 +152,7 @@ function testSymbol(binary, offset, symbol)
         {
             // read up to relocated op
             crcB.read(binary, offset + fnOffset, relocs[nReloc].offset - fnOffset);
-            fnOffset = relocs[nReloc.offset];
+            fnOffset = relocs[nReloc].offset;
         }
         else if(fnOffset == relocs[nReloc].offset) 
         {
@@ -165,5 +170,28 @@ function testSymbol(binary, offset, symbol)
         fnOffset = symbol.size;
     }
 
-    return (crcB.result == symbol.crcB);
+    if(crcB.result == symbol.crcB)
+    {
+        var dv = new DataView(binary.buffer, offset);
+
+        for(var i = 0; i < relocs.length; i++)
+        {
+            if(relocs[i].type == 'targ26')
+            {
+                var jal = dv.getUint32(relocs[i].offset);
+                var target = 0x80000000 + (jal & 0x3FFFFFF) * 4;
+                self.postMessage({'status': 'reloc_result', 'name': relocs[i].name, 'address': target });
+            }
+            else if(relocs[i].type == 'lo16' &&
+                    relocs[i-1].type == 'hi16' &&
+                    relocs[i].name == relocs[i-1].name)
+            {
+                var hi16 = dv.getUint16(relocs[i-1].offset + 2);
+                var lo16 = dv.getInt16(relocs[i-0].offset + 2);
+                var address = ((hi16 << 16) + lo16) >>> 0;
+                self.postMessage({'status': 'reloc_result', 'name': relocs[i].name, 'address': address });
+            }
+        }
+        return true;
+    }
 }

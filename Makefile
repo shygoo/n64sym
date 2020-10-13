@@ -18,9 +18,9 @@ BUILTIN_SIGS_DEFL=$(BUILD_DIR)/builtin_signatures.sig.defl
 
 COMPRESS=tools/bin/compress
 
-.PHONY: all n64sym elf2pj64 elftest clean rebuild_sigs test
+.PHONY: all n64sym clean rebuild_sigs test
 
-all: n64sym n64sig elf2pj64 elftest
+all: n64sym n64sig
 
 ########################################
 

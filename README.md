@@ -1,4 +1,4 @@
-# n64sym utility
+# n64sym
 
 `n64sym` is a command-line utility that identifies symbols in N64 games.
 
@@ -48,7 +48,7 @@ Sets the output path. If this option is not used, `n64sym` will use the standard
 
 #### `-h <headersize>`
 
-Overrides the header size (the value to add to symbol addresses). By default this value is either `0x80000000` or a value determined by the entry point field and bootcode if the input file is a ROM image.
+Overrides the header size (displacement of memory address against absolute file address). By default this value is either `0x80000000` or the entry point if the input file is a ROM image.
 
 #### `-t`
 
@@ -56,7 +56,7 @@ Enables thorough scanning. When this option is enabled, the scanner will check e
 
 #### `-v`
 
-Enables verbose logging.
+Enables verbose output.
 
 ## Examples
 ```
@@ -72,12 +72,26 @@ n64sym "Ronaldinho Soccer 64.z64" -l "./libultra" | grep "osPiStartDma"
 ```
 ---
 
-# n64sig utility
+# n64sig
 
 `n64sig` is a command-line utility that generates `n64sym`-compatible signature files.
 
 ## Usage
 
-    n64sig <output path> <library/object path(s)>
+    n64sig [options] > output_path
 
+## Options
 
+    -l <lib/obj path(s)>  generate signatures from object/library file(s)
+    -f <format>           set the output format (json, default)
+---
+
+# Building
+
+## Utilities
+
+Run `make` to build `n64sym` and `n64sig`.
+ 
+## Built-in signatures
+
+Create a directory in the project root named `oslibs` and drop the desired library/object files in it. Then run `make rebuild_sigs` to rebuild `src/builtin_sigs.sig` and `web/signatures.json`.

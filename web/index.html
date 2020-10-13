@@ -2,7 +2,7 @@
 <html>
 <head>
 <title>Hack64 - Web n64sym</title>
-<meta name="description" content="Web-based symbol scanner for Nintendo 64 ROM/RAM dumps"/>
+<meta name="description" content="Symbol scanner for Nintendo 64 ROM/RAM dumps"/>
 <script src="js/crc32.js"></script>
 <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,400italic,700,700italic' rel='stylesheet' type='text/css'>
 <style>
@@ -96,7 +96,7 @@ label span {
         <div style="display: inline-block; background-color: rgb(47,49,54); text-align:left;">
             <div style="text-align: center; padding: 10px;">
                 <div style="font-size: 24px;">Web n64sym</div>
-                <div class="desc">Web-based symbol scanner for Nintendo 64 ROM/RAM dumps &bull; <a href="https://github.com/shygoo/n64sym">Source</a></div>
+                <div class="desc">Symbol scanner for Nintendo 64 ROM/RAM dumps &bull; <a href="https://github.com/shygoo/n64sym">Source</a></div>
             </div>
             <table style="padding: 10px;">
                 <tr>
@@ -136,306 +136,344 @@ label span {
     <textarea id="results-copy" style="position: fixed; display: none;"></textarea>
 </div>
 <script>
-
-function N64Sym()
+class N64Sym
 {
-    this.signatures = null;
-    this.binary = null;
-    this.dvBinary = null;
-    this.results = [];
-    this.likelyFunctionOffsets = [];
-    this.numActiveWorkers = 0;
-    this.numSignaturesScanned = 0;
-    this.percentScanned = 0;
-    this.entryPoint = 0;
-    this.endianCheck = 0;
-    this.bRom = false;
-    this.bootcheck = 0;
-    this.bootcode = 0;
-    this.bThoroughScan = false;
-
-    this.domFile = document.querySelector('#file');
-    //this.domStatus = document.querySelector('#status');
-    this.domResults = document.querySelector('#results');
-    this.domResultsCopy = document.querySelector('#results-copy');
-    this.domProgressFill = document.querySelector('#progress-fill');
-    //this.domRomInfo = document.querySelector('#rominfo');
-
-    this.domNumResults = document.querySelector('#num-results');
-    this.domProgressPercent = document.querySelector('#progress-percent');
-
-    this.domOutput = document.querySelector('#output-select');
-    this.domRunBtn = document.querySelector('#run-btn');
-    this.domThoroughChk = document.querySelector('#thorough-chk');
-
-    this.domCopyLinkSpan = document.querySelector('#copy-link-span');
-
-    this.domFile.addEventListener('change', (e) =>
+    constructor()
     {
-        var reader = new FileReader();
-
-        reader.onloadend = () =>
-        {
-            this.binary = new Uint8Array(reader.result);
-            this.dvBinary = new DataView(this.binary.buffer);
-            this.domRunBtn.removeAttribute('disabled');
-        }
-        reader.readAsArrayBuffer(this.domFile.files[0]);
-    });
-
-    this.domThoroughChk.addEventListener('change', (e) => {
-        this.bThoroughScan = e.target.checked;
-    })
-
-    this.domRunBtn.addEventListener('click', (e) => {
-        //this.domFile.setAttribute('disabled', '');
-        //this.domRunBtn.setAttribute('disabled', '');
-        //this.domThoroughChk.setAttribute('disabled', '');
-
-        var elems = [ this.domFile, this.domThoroughChk, this.domRunBtn, this.domOutput ];
-        elems.forEach(elem => elem.setAttribute('disabled', ''));
-
-        this.setup();
-        this.scan();
-    });
-}
-
-N64Sym.prototype.loadSignatures = function(url)
-{
-    var xhr = new XMLHttpRequest();
-
-    xhr.onreadystatechange = () =>
-    {
-        if(xhr.readyState == XMLHttpRequest.DONE /*&& xhr.status == 200*/)
-        {
-            this.signatures = JSON.parse(xhr.response);
-        }
-    }
-
-    xhr.open("get", url, true);
-    xhr.send();
-}
-
-N64Sym.prototype.redrawResults = function()
-{
-    this.domResults.innerHTML = '';
-
-    this.results.forEach(result => {
-        var domResult = document.createElement('div');
-        var address = this.entryPoint + result.offset;
-        domResult.appendChild(new Text(address.toString(16).toUpperCase() + " " + result.name));
-        this.domResults.appendChild(domResult);
-    });
-}
-
-N64Sym.prototype.onScanFinished = function()
-{
-    this.updateCopyText();
-
-    this.domProgressFill.style.width = "0%";
-    this.domProgressPercent.innerHTML = "&nbsp;";
-    this.domNumResults.innerHTML = this.results.length + " results";
-    this.domNumResults.style.display = "inline-block";
-    this.domCopyLinkSpan.style.display = "inline-block";
-
-    var elems = [ this.domFile, this.domThoroughChk, this.domRunBtn, this.domOutput ];
-    elems.forEach(elem => elem.removeAttribute('disabled'));
-}
-
-N64Sym.prototype.updateCopyText = function()
-{
-    var copyText = "";
-
-    this.results.forEach(result => {
-        var address = this.entryPoint + result.offset;
-        copyText += address.toString(16).toUpperCase() + " " + result.name + "\n";
-    });
-
-    this.domResultsCopy.innerHTML = copyText;
-}
-
-
-N64Sym.prototype.copyResultsToClipboard = function()
-{
-    this.domResultsCopy.style.display = "inline-block";
-    this.domResultsCopy.select();
-    document.execCommand('copy');
-    this.domResultsCopy.style.display = "none";
-}
-
-N64Sym.prototype.createScanWorker = function()
-{
-    var worker = new Worker("js/n64sym-worker.js");
-
-    worker.onmessage = (e) =>
-    {
-        var message = e.data;
-    
-        switch(message['status'])
-        {
-        case 'result':
-            var result = { name: message['name'], offset: message['offset'] };
-            this.results.push(result);
-            this.results.sort((a, b) => a.offset - b.offset);
-            this.redrawResults();
-            break;
-        case 'done':
-            this.numActiveWorkers--;
-            if(this.numActiveWorkers == 0)
-            {
-                this.onScanFinished();
-            }
-            break;
-        case 'progress':
-            this.numSignaturesScanned++;
-            
-            var percentScannedNow = (this.numSignaturesScanned / this.signatures.length) * 100;
-            percentScannedNow = Math.round(percentScannedNow * 10) / 10; // round to nearest .5
-
-            if(percentScannedNow > this.percentScanned)
-            {
-                this.percentScanned = percentScannedNow;
-                this.domProgressFill.style.width = this.percentScanned + "%";
-                this.domProgressPercent.innerHTML = (this.percentScanned | 0) + "%";
-            }
-            break;
-        }
-    }
-
-    return worker;
-}
-
-N64Sym.prototype.setup = function()
-{
-    this.results = [];
-    this.likelyFunctionOffsets = [];
-    this.numSignaturesScanned = 0;
-    this.percentScanned = 0;
-
-    this.bRom = false;
-    this.endianCheck = this.dvBinary.getUint32(0x00);
-
-    switch(this.endianCheck)
-    {
-    case 0x80371240:
-        this.bRom = true;
-        break;
-    case 0x40123780:
-        for(var i = 0; i < this.dvBinary.byteLength; i += 4)
-        {
-            this.dvBinary.setUint32(i, this.dvBinary.getUint32(i, true));
-        }
-        this.bRom = true;
-        break;
-    case 0x37804012:
-        for(var i = 0; i < dvBinary.byteLength; i += 2)
-        {
-            this.dvBinary.setUint16(i, this.dvBinary.getUint16(i, true));
-        }
-        this.bRom = true;
-        break;
-    }
-
-    if(this.bRom)
-    {
-        this.entryPoint = this.dvBinary.getUint32(0x08) - 0x1000;
-        this.bootcheck = crc32(this.binary, 0x40, 0xFC0);
+        this.signatures = null;
+        this.binary = null;
+        this.dvBinary = null;
+        this.results = [];
+        this.relocResults = [];
+        this.likelyFunctionOffsets = [];
+        this.numActiveWorkers = 0;
+        this.numSignaturesScanned = 0;
+        this.percentScanned = 0;
+        this.entryPoint = 0;
+        this.endianCheck = 0;
+        this.bRom = false;
+        this.bootcheck = 0;
         this.bootcode = 0;
+        this.bThoroughScan = false;
 
-        switch(this.bootcheck)
+        this.dom = {};
+
+        var domQueries = {
+            'file': '#file',
+            'outputSelect': '#output-select',
+            'thoroughChk': '#thorough-chk',
+            'runBtn': '#run-btn',
+            'results': '#results',
+            'resultsCopy': '#results',
+            'progressFill': '#progress-fill',
+            'numResults': '#num-results',
+            'progressPercent': '#progress-percent',
+            'copyLinkSpan': '#copy-link-span'
+        };
+
+        for(var key in domQueries)
         {
-        case 0x6170A4A1:
-            this.bootcode = 6101;
-            break;
-	    case 0x90BB6CB5:
-            this.bootcode = 6102;
-            break;
-	    case 0x0B050EE0:
-            this.bootcode = 6103;
-            this.entryPoint -= 0x100000;
-            break;
-	    case 0x98BC2C86:
-            this.bootcode = 6105;
-            break;
-	    case 0xACC8580A:
-            this.bootcode = 6106;
-            this.entryPoint -= 0x200000;
-            break;
+            this.dom[key] = document.querySelector(domQueries[key]);
         }
-    }
 
-    //this.entryPoint = 0;
+        this.dom['file'].addEventListener('change', (e) => {
+            var reader = new FileReader();
 
-    var offsets = new Set();
-
-    for(var offset = 0; offset < this.dvBinary.byteLength; offset += 4)
-    {
-        var word = this.dvBinary.getUint32(offset);
-
-        // JR RA + 8
-        if(word == 0x03E00008)
-        {
-            for(var i = 8;; i += 4)
-            {
-                if(this.dvBinary.getUint32(offset + i) != 0x00000000)
-                {
-                    offsets.add(offset + i);
-                    break;
-                }
+            reader.onloadend = () => {
+                this.binary = new Uint8Array(reader.result);
+                this.dvBinary = new DataView(this.binary.buffer);
+                this.dom['runBtn'].removeAttribute('disabled');
             }
-        }
-
-        // ADDIU SP, SP, -n
-        if((word & 0xFFFF0000) == 0x27BD0000 && this.dvBinary.getInt16(offset + 2) < 0)
-        {
-            offsets.add(offset);
-        }
-    }
-
-    this.likelyFunctionOffsets = Array.from(offsets);
-}
-
-N64Sym.prototype.scan = function()
-{
-    if(this.binary == null || this.signatures == null)
-    {
-        return;
-    }
-
-    this.domNumResults.style.display = "none";
-    this.domCopyLinkSpan.style.display = "none";
-
-    var numCpuCores = navigator.hardwareConcurrency || 1;
-
-    var sigIndex = 0;
-    var sigCount = (this.signatures.length / numCpuCores) | 0;
-    var remainder = this.signatures.length % numCpuCores;
-
-    for(var i = 0; i < numCpuCores; i++)
-    {
-        worker = this.createScanWorker();
-        this.numActiveWorkers++;
-        worker.postMessage({
-            binary: this.binary,
-            signatures: this.signatures,
-            index: sigIndex,
-            count: sigCount + remainder,
-            offsets: this.likelyFunctionOffsets,
-            thorough: this.bThoroughScan
+            reader.readAsArrayBuffer(this.dom['file'].files[0]);
         });
 
-        sigIndex += sigCount;
+        this.dom['thoroughChk'].addEventListener('change', (e) => {
+            this.bThoroughScan = e.target.checked;
+        })
 
-        if(remainder > 0)
+        this.dom['runBtn'].addEventListener('click', (e) => {
+            var elems = [ this.dom['file'], this.dom['thoroughChk'], this.dom['runBtn'], this.dom['outputSelect'] ];
+            elems.forEach(elem => elem.setAttribute('disabled', ''));
+            this.setup();
+            this.scan();
+        });
+    }
+
+    loadSignatures(url)
+    {
+        var xhr = new XMLHttpRequest();
+
+        xhr.onreadystatechange = () => {
+            if(xhr.readyState == XMLHttpRequest.DONE /*&& xhr.status == 200*/)
+            {
+                this.signatures = JSON.parse(xhr.response);
+                console.log("Loaded " + this.signatures.length + " signatures")
+            }
+        }
+
+        xhr.open("get", url, true);
+        xhr.send();
+    }
+
+    redrawResults()
+    {
+        this.dom['results'].innerHTML = '';
+
+        this.results.forEach(result => {
+            var domResult = document.createElement('div');
+            var address = result.address || (this.entryPoint + result.offset);
+            domResult.appendChild(new Text(address.toString(16).toUpperCase() + " " + result.name));
+            this.dom['results'].appendChild(domResult);
+        });
+    }
+
+    onScanFinished()
+    {
+        this.updateCopyText();
+
+        this.dom['progressFill'].style.width = "0%";
+        this.dom['progressPercent'].innerHTML = "&nbsp;";
+        this.dom['numResults'].innerHTML = this.results.length + " results";
+        this.dom['numResults'].style.display = "inline-block";
+        this.dom['copyLinkSpan'].style.display = "inline-block";
+
+        var elems = [ this.dom['file'], this.dom['thoroughChk'], this.dom['runBtn'], this.dom['outputSelect'] ];
+        elems.forEach(elem => elem.removeAttribute('disabled'));
+    }
+
+    updateCopyText()
+    {
+        var copyText = "";
+
+        this.results.forEach(result => {
+            var address = result.address || (this.entryPoint + result.offset);
+            copyText += address.toString(16).toUpperCase() + " " + result.name + "\n";
+        });
+
+        this.dom['resultsCopy'].innerText = copyText;
+    }
+
+    copyResultsToClipboard()
+    {
+        this.dom['resultsCopy'].style.display = "inline-block";
+        this.dom['resultsCopy'].select();
+        document.execCommand('copy');
+        this.dom['resultsCopy'].style.display = "none";
+    }
+
+    createScanWorker()
+    {
+        var worker = new Worker("js/n64sym-worker.js");
+
+        worker.onmessage = (e) =>
         {
-            remainder = 0;
+            var message = e.data;
+        
+            const dispatch = {
+                result: () => {
+                    this.addResult({ name: message['name'], offset: message['offset'] });
+                },
+                reloc_result: () => {
+                    this.addResult({ name: message['name'], address: message['address'] });
+                },
+                progress: () => {
+                    this.numSignaturesScanned++;
+                
+                    var percentScannedNow = (this.numSignaturesScanned / this.signatures.length) * 100;
+                    percentScannedNow = Math.round(percentScannedNow * 10) / 10; // round to nearest 0.10
+
+                    if(percentScannedNow > this.percentScanned)
+                    {
+                        this.percentScanned = percentScannedNow;
+                        this.dom['progressFill'].style.width = this.percentScanned + "%";
+                        this.dom['progressPercent'].innerHTML = (this.percentScanned | 0) + "%";
+                    }
+                },
+                done: () => {
+                    this.numActiveWorkers--;
+                    if(this.numActiveWorkers == 0)
+                    {
+                        this.onScanFinished();
+                    }
+                },
+            };
+
+            if(message['status'] in dispatch)
+            {
+                dispatch[message['status']]();
+            }
+        }
+
+        return worker;
+    }
+
+    setup()
+    {
+        this.results = [];
+        this.likelyFunctionOffsets = [];
+        this.numSignaturesScanned = 0;
+        this.percentScanned = 0;
+        this.bRom = false;
+
+        this.romEndianCheck();
+        this.locateEntryPoint();
+        this.collectLikelyFunctionOffsets();
+    }
+
+    romEndianCheck()
+    {
+        this.endianCheck = this.dvBinary.getUint32(0x00);
+
+        switch(this.endianCheck)
+        {
+        case 0x80371240:
+            this.bRom = true;
+            break;
+        case 0x40123780:
+            for(var i = 0; i < this.dvBinary.byteLength; i += 4)
+            {
+                this.dvBinary.setUint32(i, this.dvBinary.getUint32(i, true));
+            }
+            this.bRom = true;
+            break;
+        case 0x37804012:
+            for(var i = 0; i < dvBinary.byteLength; i += 2)
+            {
+                this.dvBinary.setUint16(i, this.dvBinary.getUint16(i, true));
+            }
+            this.bRom = true;
+            break;
         }
     }
-}
 
-N64Sym.prototype.useThoroughScan = function(bUseThoroughScan)
-{
-    this.bThoroughScan = bUseThoroughScan;
+    locateEntryPoint()
+    {
+        if(this.bRom)
+        {
+            this.entryPoint = this.dvBinary.getUint32(0x08) - 0x1000;
+            this.bootcheck = crc32(this.binary, 0x40, 0xFC0);
+            this.bootcode = 0;
+
+            switch(this.bootcheck)
+            {
+            case 0x6170A4A1:
+                this.bootcode = 6101;
+                break;
+	        case 0x90BB6CB5:
+                this.bootcode = 6102;
+                break;
+	        case 0x0B050EE0:
+                this.bootcode = 6103;
+                this.entryPoint -= 0x100000;
+                break;
+	        case 0x98BC2C86:
+                this.bootcode = 6105;
+                break;
+	        case 0xACC8580A:
+                this.bootcode = 6106;
+                this.entryPoint -= 0x200000;
+                break;
+            }
+        }
+    }
+
+    collectLikelyFunctionOffsets()
+    {
+        var offsets = new Set();
+
+        for(var offset = 0; offset < this.dvBinary.byteLength; offset += 4)
+        {
+            var word = this.dvBinary.getUint32(offset);
+
+            // JR RA + 8
+            if(word == 0x03E00008)
+            {
+                for(var i = 8;; i += 4)
+                {
+                    if(this.dvBinary.getUint32(offset + i) != 0x00000000)
+                    {
+                        offsets.add(offset + i);
+                        break;
+                    }
+                }
+            }
+
+            // ADDIU SP, SP, -n
+            if((word & 0xFFFF0000) == 0x27BD0000 && this.dvBinary.getInt16(offset + 2) < 0)
+            {
+                offsets.add(offset);
+            }
+        }
+
+        this.likelyFunctionOffsets = Array.from(offsets);
+    }
+
+    scan()
+    {
+        if(this.binary == null || this.signatures == null)
+        {
+            return;
+        }
+
+        this.dom['numResults'].style.display = "none";
+        this.dom['copyLinkSpan'].style.display = "none";
+
+        var numCpuCores = navigator.hardwareConcurrency || 1;
+
+        var sigIndex = 0;
+        var sigsPerThread = (this.signatures.length / numCpuCores) | 0;
+        var remainder = this.signatures.length % numCpuCores;
+
+        for(var i = 0; i < numCpuCores; i++)
+        {
+            var worker = this.createScanWorker();
+            this.numActiveWorkers++;
+            worker.postMessage({
+                binary: this.binary,
+                signatures: this.signatures,
+                index: sigIndex,
+                count: sigsPerThread + remainder,
+                offsets: this.likelyFunctionOffsets,
+                thorough: this.bThoroughScan
+            });
+
+            sigIndex += sigsPerThread + remainder;
+
+            if(remainder > 0)
+            {
+                remainder = 0;
+            }
+        }
+    }
+
+    addResult(result)
+    {
+        var resAddr = result.address || (this.entryPoint + result.offset);
+
+        for(var i in this.results)
+        {
+            var address = this.results[i].address || (this.entryPoint + this.results[i].offset);
+            if(resAddr == address)
+            {
+                return;
+            }
+        }
+
+        this.results.push(result);
+
+        this.results.sort((a, b) => {
+            var addrA = a.address || (a.offset + this.entryPoint);
+            var addrB = b.address || (b.offset + this.entryPoint);
+            return addrA - addrB;
+        });
+
+        this.redrawResults();
+    }
+
+    useThoroughScan(bUseThoroughScan)
+    {
+        this.bThoroughScan = bUseThoroughScan;
+    }
 }
 
 var n64sym = new N64Sym();
