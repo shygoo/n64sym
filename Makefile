@@ -1,8 +1,8 @@
 CC=g++
-CFLAGS=-static -I./include -I./build -O3 -s -Wall -Wno-unused-function -Wno-strict-aliasing -Wno-unused-result
+CFLAGS=-I./include -I./build -O3 -s -Wall -Wno-unused-function -Wno-strict-aliasing -Wno-unused-result
 
 LD=g++
-LDFLAGS=-s -Wl,--gc-sections,-lm,-lpthread
+LDFLAGS=-static -s -Wl,--gc-sections,-lm,-lpthread
 
 SRC_DIR=src
 OBJ_DIR=obj
