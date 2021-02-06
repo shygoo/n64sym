@@ -1005,11 +1005,12 @@ void CN64Sym::Output(const char *format, ...)
 
     size_t len = vsnprintf(NULL, 0, format, args);
     char *str = new char[len + 1];
+    va_end(args);
 
+    va_start(args, format);
     vsprintf(str, format, args);
+    va_end(args);
 
     *m_Output << str;
     delete[] str;
-    
-    va_end(args);
 }
