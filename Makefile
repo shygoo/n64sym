@@ -1,4 +1,4 @@
-CC=g++
+CC=g++ -std=c++11
 CFLAGS=-I./include -I./build -O3 -s -Wall -Wno-unused-function -Wno-strict-aliasing -Wno-unused-result
 
 LD=g++
