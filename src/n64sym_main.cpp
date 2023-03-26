@@ -25,7 +25,7 @@ int main(int argc, const char* argv[])
             "  Options:\n"
             "    -s                         scan for symbols from built-in signature file\n"
             "    -l <sig/lib/obj path>      scan for symbols from signature/library/object file(s)\n"
-            "    -f <format>                set the output format (pj64, nemu, armips, n64split, default)\n"
+            "    -f <format>                set the output format (pj64, nemu, armips, n64split, splat, default)\n"
             "    -o <output path>           set the output path\n"
             "    -h <headersize>            set the headersize (default: 0x80000000)\n"
             "    -t                         scan thoroughly\n"
