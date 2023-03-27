@@ -29,7 +29,8 @@ typedef enum
     N64SYM_FMT_PJ64,
     N64SYM_FMT_NEMU,
     N64SYM_FMT_ARMIPS,
-    N64SYM_FMT_N64SPLIT
+    N64SYM_FMT_N64SPLIT,
+    N64SYM_FMT_SPLAT
 } n64sym_output_fmt_t;
 
 class CN64Sym

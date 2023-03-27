@@ -16,7 +16,7 @@ If the file extension is `.z64`, `.n64`, or `.v64`, the tool will assume the fil
 
     -s                        scan for symbols from the built-in signature file
     -l <sig/lib/obj path(s)>  scan for symbols from signature/object/library file(s)
-    -f <output format>        set the output format (pj64, nemu, armips, n64split, default)
+    -f <output format>        set the output format (pj64, nemu, armips, n64split, splat, default)
     -o <output path>          set the output path
     -h <headersize>           set the header size  (default: 0x80000000)
     -t                        scan thoroughly
@@ -32,7 +32,7 @@ Scans against signature files and ELF libraries/objects. If a directory path is 
 
 #### `-f <format>`
 
-Sets the output format. Valid formats include `pj64`, `nemu`, `armips`, `n64split`, and `default`.
+Sets the output format. Valid formats include `pj64`, `nemu`, `armips`, `n64split`, `splat`, and `default`.
 
 | Format     | Description                             |
 |------------|-----------------------------------------|
@@ -40,6 +40,7 @@ Sets the output format. Valid formats include `pj64`, `nemu`, `armips`, `n64spli
 | `nemu`     | Nemu64 bookmarks (*.nbm)                |
 | `armips`   | armips labels (*.asm)                   |
 | `n64split` | n64split config labels (*.yaml)         |
+| `splat`    | splat symbol names (symbol_addrs.txt)   |
 | `default`  | Space-separated address and symbol name |
 
 #### `-o <output path>`
